@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Stunt Moto TMA</title>
+  <title>Realistic Stunt Moto</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Подключаем легкий физический 2D-движок Matter.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -17,13 +19,15 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: #111;
+      background: #0f1015;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
-    #gameCanvas {
+    #canvas-container {
       width: 100%;
       height: 100%;
-      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
     }
     /* UI Overlay */
     #ui-container {
@@ -37,28 +41,21 @@
       flex-direction: column;
       justify-content: space-between;
       padding: 16px;
+      z-index: 5;
     }
     .hud {
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
       color: #fff;
-      font-weight: 800;
-      text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+      font-weight: 900;
+      text-shadow: 0 2px 6px rgba(0,0,0,0.8);
     }
-    .score-box {
-      font-size: 24px;
-    }
-    .stunt-label {
-      font-size: 16px;
-      color: #ffd700;
-      height: 20px;
-    }
+    .score-box { font-size: 26px; }
+    .stunt-label { font-size: 16px; color: #f1c40f; height: 22px; }
     .controls {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 12px;
-      width: 100%;
       margin-bottom: 24px;
       pointer-events: auto;
     }
@@ -68,34 +65,33 @@
       gap: 10px;
     }
     .btn {
-      background: rgba(255, 255, 255, 0.15);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255, 255, 255, 0.3);
+      background: rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.25);
       border-radius: 14px;
       color: #fff;
       font-size: 15px;
-      font-weight: 700;
+      font-weight: 800;
       padding: 18px 0;
       text-align: center;
-      active-background: rgba(255, 255, 255, 0.35);
       touch-action: none;
     }
     .btn:active, .btn.active {
-      background: rgba(255, 255, 255, 0.4);
-      transform: scale(0.97);
+      transform: scale(0.96);
+      background: rgba(255, 255, 255, 0.3);
     }
     .btn-gas { background: rgba(46, 204, 113, 0.3); border-color: #2ecc71; }
-    .btn-brake { background: rgba(231, 76, 60, 0.3); border-color: #e74c3c; }
-    
-    /* Экран меню / рестарта */
+    .btn-rear-brake { background: rgba(231, 76, 60, 0.3); border-color: #e74c3c; }
+    .btn-front-brake { background: rgba(230, 126, 34, 0.3); border-color: #e67e22; }
+
     #overlay-screen {
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0, 0, 0, 0.85);
-      display: flex;
+      background: rgba(0, 0, 0, 0.88);
+      display: none;
       flex-direction: column;
       justify-content: center;
       align-items: center;
@@ -103,40 +99,22 @@
       pointer-events: auto;
       z-index: 10;
     }
-    .bike-selector {
-      display: flex;
-      gap: 8px;
-      margin: 20px 0;
-    }
-    .bike-btn {
-      padding: 8px 14px;
-      border-radius: 8px;
-      border: 1px solid #555;
-      background: #222;
-      color: #fff;
-      font-size: 13px;
-      cursor: pointer;
-    }
-    .bike-btn.selected {
-      border-color: #ffd700;
-      background: #443400;
-      color: #ffd700;
-    }
-    .start-btn {
-      background: #ffd700;
+    .restart-btn {
+      background: #f1c40f;
       color: #000;
-      font-weight: 800;
+      font-weight: 900;
       font-size: 18px;
       border: none;
-      padding: 14px 40px;
-      border-radius: 25px;
-      margin-top: 15px;
+      padding: 14px 44px;
+      border-radius: 30px;
+      margin-top: 20px;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
 
-  <canvas id="gameCanvas"></canvas>
+  <div id="canvas-container"></div>
 
   <div id="ui-container">
     <div class="hud">
@@ -150,84 +128,64 @@
     <div class="controls">
       <div class="ctrl-col">
         <div class="btn" id="btn-lean-back">ВЕС НАЗАД</div>
-        <div class="btn btn-brake" id="btn-rear-brake">ЗАДНИЙ ТОРМОЗ</div>
+        <div class="btn btn-rear-brake" id="btn-rear-brake">ЗАДНИЙ ТОРМОЗ</div>
       </div>
       <div class="ctrl-col">
-        <div class="btn" id="btn-front-brake">ПЕРЕДНИЙ ТОРМОЗ</div>
+        <div class="btn btn-front-brake" id="btn-front-brake">ПЕРЕДНИЙ ТОРМОЗ</div>
         <div class="btn btn-gas" id="btn-gas">ГАЗ</div>
       </div>
     </div>
   </div>
 
   <div id="overlay-screen">
-    <h1 style="font-size: 32px; font-weight: 900; margin-bottom: 5px;">MOTO STUNT 2D</h1>
-    <p style="color: #aaa; font-size: 14px;" id="crash-reason">Выбери аппарат для тренировки</p>
-    
-    <div class="bike-selector">
-      <button class="bike-btn selected" onclick="selectBike('scooter')">Скутер 50cc</button>
-      <button class="bike-btn" onclick="selectBike('pitbike')">Питбайк 125cc</button>
-      <button class="bike-btn" onclick="selectBike('enduro')">Эндуро 250cc</button>
-    </div>
-
-    <button class="start-btn" onclick="startGame()">ГАЗОВАТЬ</button>
+    <h1 style="font-size: 32px; font-weight: 900; margin-bottom: 8px;">💥 КРАШ!</h1>
+    <p style="color: #bbb; font-size: 15px;" id="crash-reason">Ты перевернулся</p>
+    <button class="restart-btn" onclick="restartGame()">ЕЩЁ РАЗ</button>
   </div>
 
   <script>
-    // Инициализация Telegram WebApp
     const tg = window.Telegram?.WebApp;
-    if (tg) {
-      tg.expand();
-      tg.ready();
-    }
+    if (tg) { tg.expand(); tg.ready(); }
 
-    const canvas = document.getElementById("gameCanvas");
-    const ctx = canvas.getContext("2d");
+    const { Engine, Render, Runner, Bodies, Composite, Constraint, Body, Events, Vector } = Matter;
 
-    function resize() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
-    window.addEventListener("resize", resize);
-    resize();
+    const engine = Engine.create();
+    const world = engine.world;
 
-    // Настройки техники
-    const BIKES = {
-      scooter: { name: "Scooter 50cc", wheelBase: 65, power: 0.35, liftTorque: 0.042, brakePower: 0.038, weight: 1.0, color: "#00d2d3" },
-      pitbike: { name: "Pitbike 125cc", wheelBase: 75, power: 0.45, liftTorque: 0.055, brakePower: 0.045, weight: 1.1, color: "#ff9f43" },
-      enduro:  { name: "Enduro 250cc",  wheelBase: 90, power: 0.60, liftTorque: 0.065, brakePower: 0.050, weight: 1.3, color: "#ee5253" }
-    };
+    const container = document.getElementById("canvas-container");
+    const render = Render.create({
+      element: container,
+      engine: engine,
+      options: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        wireframes: false,
+        background: "#12131a"
+      }
+    });
 
-    let activeBikeKey = "scooter";
-    function selectBike(key) {
-      activeBikeKey = key;
-      document.querySelectorAll(".bike-btn").forEach(b => b.classList.remove("selected"));
-      event.target.classList.add("selected");
-    }
+    Render.run(render);
+    const runner = Runner.create();
+    Runner.run(runner, engine);
 
-    // Состояние игры
-    let gameState = "MENU"; // MENU, PLAYING, CRASHED
-    let score = 0;
-    let stuntTimer = 0;
-    let currentStunt = "";
-
-    // Ввод
+    // Управление
     const input = { gas: false, rearBrake: false, frontBrake: false, leanBack: false };
 
-    function bindTouch(id, prop) {
+    function bind(id, prop) {
       const el = document.getElementById(id);
-      const start = (e) => { e.preventDefault(); input[prop] = true; el.classList.add("active"); };
-      const end = (e) => { e.preventDefault(); input[prop] = false; el.classList.remove("active"); };
-      el.addEventListener("touchstart", start);
-      el.addEventListener("touchend", end);
-      el.addEventListener("mousedown", start);
-      el.addEventListener("mouseup", end);
+      const on = (e) => { e.preventDefault(); input[prop] = true; el.classList.add("active"); };
+      const off = (e) => { e.preventDefault(); input[prop] = false; el.classList.remove("active"); };
+      el.addEventListener("touchstart", on);
+      el.addEventListener("touchend", off);
+      el.addEventListener("mousedown", on);
+      el.addEventListener("mouseup", off);
     }
-    bindTouch("btn-gas", "gas");
-    bindTouch("btn-rear-brake", "rearBrake");
-    bindTouch("btn-front-brake", "frontBrake");
-    bindTouch("btn-lean-back", "leanBack");
+    bind("btn-gas", "gas");
+    bind("btn-rear-brake", "rearBrake");
+    bind("btn-front-brake", "frontBrake");
+    bind("btn-lean-back", "leanBack");
 
-    // Клавиатура для тестирования на ПК
+    // Клавиши для ПК тестов
     window.addEventListener("keydown", (e) => {
       if (e.code === "ArrowUp" || e.code === "KeyD") input.gas = true;
       if (e.code === "ArrowDown" || e.code === "KeyS") input.rearBrake = true;
@@ -241,245 +199,192 @@
       if (e.code === "ArrowLeft") input.leanBack = false;
     });
 
-    // Физическая модель мотоцикла
-    let bike = {
-      x: 100,
-      y: 0,
-      vx: 0,
-      vy: 0,
-      angle: 0, // Угол в радианах
-      angularVelocity: 0,
-      wheelRadius: 16
-    };
+    // Создание рельефа трассы
+    function createTerrain() {
+      const segments = [];
+      const baseY = window.innerHeight * 0.75;
+      let currX = 0;
+      let currY = baseY;
 
-    const groundY = () => canvas.height - 180;
+      for (let i = 0; i < 40; i++) {
+        let width = 200 + Math.random() * 80;
+        let angle = 0;
 
-    function resetBike() {
-      bike.x = 100;
-      bike.y = groundY() - 30;
-      bike.vx = 0;
-      bike.vy = 0;
-      bike.angle = 0;
-      bike.angularVelocity = 0;
-      score = 0;
-      currentStunt = "";
-    }
+        // Делаем кочки и трамплины через каждые несколько сегментов
+        if (i > 3 && i % 4 === 0) angle = -0.15; // трамплин вверх
+        else if (i > 3 && (i - 1) % 4 === 0) angle = 0.15; // спуск
 
-    function startGame() {
-      resetBike();
-      document.getElementById("overlay-screen").style.display = "none";
-      gameState = "PLAYING";
-    }
+        const nextX = currX + Math.cos(angle) * width;
+        const nextY = currY + Math.sin(angle) * width;
 
-    function crash(reason) {
-      gameState = "CRASHED";
-      if (tg?.HapticFeedback) {
-        tg.HapticFeedback.notificationOccurred("error");
+        const midX = (currX + nextX) / 2;
+        const midY = (currY + nextY) / 2;
+
+        const ground = Bodies.rectangle(midX, midY + 25, width, 50, {
+          isStatic: true,
+          angle: angle,
+          friction: 0.95,
+          render: { fillStyle: "#1e222d" }
+        });
+
+        segments.push(ground);
+        currX = nextX;
+        currY = nextY;
       }
+      Composite.add(world, segments);
+    }
+    createTerrain();
+
+    // Создание мотоцикла с РЕАЛЬНОЙ подвеской
+    let bikeBody, rearWheel, frontWheel, rearSuspension, frontSuspension;
+    let isCrashed = false;
+    let score = 0;
+
+    function buildMotorcycle(x, y) {
+      const group = Body.nextGroup(true); // чтобы колеса и рама не сталкивались друг с другом
+
+      // Рама байка
+      bikeBody = Bodies.rectangle(x, y, 70, 20, {
+        collisionFilter: { group: group },
+        density: 0.003,
+        render: { fillStyle: "#e74c3c" }
+      });
+
+      // Колеса
+      const wheelOptions = {
+        collisionFilter: { group: group },
+        friction: 0.98,
+        density: 0.002,
+        render: { fillStyle: "#2c3e50" }
+      };
+      rearWheel = Bodies.circle(x - 40, y + 25, 20, wheelOptions);
+      frontWheel = Bodies.circle(x + 40, y + 25, 20, wheelOptions);
+
+      // Задняя подвеска (пружина-амортизатор)
+      rearSuspension = Constraint.create({
+        bodyA: bikeBody,
+        pointA: { x: -35, y: 10 },
+        bodyB: rearWheel,
+        stiffness: 0.18,   // мягкость хода подвески
+        damping: 0.08,     // гашение ударов
+        length: 22,
+        render: { strokeStyle: "#7f8c8d", lineWidth: 5 }
+      });
+
+      // Передняя подвеска (вилка)
+      frontSuspension = Constraint.create({
+        bodyA: bikeBody,
+        pointA: { x: 35, y: 10 },
+        bodyB: frontWheel,
+        stiffness: 0.22,
+        damping: 0.09,
+        length: 22,
+        render: { strokeStyle: "#bdc3c7", lineWidth: 5 }
+      });
+
+      // Дополнительные соединители геометрии, чтобы рама держала баланс оси
+      const rearAxle = Constraint.create({
+        bodyA: bikeBody,
+        pointA: { x: -10, y: 10 },
+        bodyB: rearWheel,
+        stiffness: 0.2,
+        damping: 0.08,
+        length: 35,
+        render: { visible: false }
+      });
+      const frontAxle = Constraint.create({
+        bodyA: bikeBody,
+        pointA: { x: 10, y: 10 },
+        bodyB: frontWheel,
+        stiffness: 0.2,
+        damping: 0.08,
+        length: 35,
+        render: { visible: false }
+      });
+
+      Composite.add(world, [bikeBody, rearWheel, frontWheel, rearSuspension, frontSuspension, rearAxle, frontAxle]);
+    }
+
+    buildMotorcycle(150, window.innerHeight * 0.65);
+
+    function triggerCrash(reason) {
+      if (isCrashed) return;
+      isCrashed = true;
+      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("error");
       document.getElementById("crash-reason").innerText = reason;
       document.getElementById("overlay-screen").style.display = "flex";
     }
 
-    // Игровой цикл
-    function update() {
-      if (gameState !== "PLAYING") return;
+    window.restartGame = function() {
+      // Очистка и пересоздание
+      const allBodies = Composite.allBodies(world);
+      const allConstraints = Composite.allConstraints(world);
+      allBodies.forEach(b => !b.isStatic && Composite.remove(world, b));
+      allConstraints.forEach(c => Composite.remove(world, c));
 
-      const spec = BIKES[activeBikeKey];
-      const gravity = 0.35;
-      bike.vy += gravity;
+      isCrashed = false;
+      score = 0;
+      document.getElementById("overlay-screen").style.display = "none";
+      buildMotorcycle(150, window.innerHeight * 0.65);
+    };
 
-      // Силы и крутящий момент
+    // Главный цикл обновлений
+    Events.on(engine, "beforeUpdate", () => {
+      if (isCrashed) return;
+
+      // 1. Газ (крутит заднее колесо + задирает раму вверх для Вилли)
       if (input.gas) {
-        bike.vx += spec.power;
-        // Газ задирает переднее колесо (вилли)
-        bike.angularVelocity += spec.liftTorque;
+        rearWheel.torque = 0.06;
+        bikeBody.torque = 0.045; // крутящий момент на подъем переда
       }
 
+      // 2. Задний тормоз (блокирует заднее колесо, сбивает угол вилли)
       if (input.rearBrake) {
-        bike.vx *= 0.94;
-        // Задний тормоз возвращает байк на колеса
-        bike.angularVelocity -= spec.brakePower * 1.5;
+        Body.setAngularVelocity(rearWheel, rearWheel.angularVelocity * 0.7);
+        bikeBody.torque = -0.06; // прижимает переднее колесо к земле
       }
 
+      // 3. Передний тормоз (выход в Стоппи)
       if (input.frontBrake) {
-        bike.vx *= 0.88;
-        // Передний тормоз вызывает стоппи (наклон вперед)
-        if (bike.vx > 1) {
-          bike.angularVelocity -= spec.brakePower * 1.8;
+        Body.setAngularVelocity(frontWheel, frontWheel.angularVelocity * 0.5);
+        if (bikeBody.velocity.x > 2) {
+          bikeBody.torque = -0.065; // задирает заднее колесо
         }
       }
 
+      // 4. Вес назад
       if (input.leanBack) {
-        bike.angularVelocity += 0.02;
+        bikeBody.torque = 0.05;
       }
 
-      // Сопротивление воздуха и трение
-      bike.vx *= 0.985;
-      bike.angularVelocity *= 0.92;
+      // Камера следит за байком
+      Render.lookAt(render, bikeBody, {
+        x: window.innerWidth * 0.35,
+        y: window.innerHeight * 0.35
+      });
 
-      // Обновление положения
-      bike.x += bike.vx;
-      bike.y += bike.vy;
-      bike.angle += bike.angularVelocity;
+      // Логика стантов и падений
+      const deg = (bikeBody.angle * 180) / Math.PI;
 
-      // Расчет координат колес
-      const halfW = spec.wheelBase / 2;
-      const cos = Math.cos(bike.angle);
-      const sin = Math.sin(bike.angle);
+      if (deg > 85) triggerCrash("Переворот назад!");
+      if (deg < -80) triggerCrash("Перелёт через руль!");
 
-      const rWheelX = bike.x - halfW * cos;
-      const rWheelY = bike.y - halfW * sin;
-
-      const fWheelX = bike.x + halfW * cos;
-      const fWheelY = bike.y + halfW * sin;
-
-      const floor = groundY();
-
-      // Коллизия заднего колеса с землей
-      if (rWheelY >= floor) {
-        bike.y = floor + halfW * sin;
-        bike.vy = 0;
-        if (bike.angle < -0.1) bike.angularVelocity += 0.02; // отскок/выравнивание
+      let stuntText = "";
+      // Wheelie: наклон назад, заднее колесо крутится
+      if (deg > 20 && deg <= 80) {
+        score += Math.floor(deg / 4);
+        stuntText = deg > 60 ? "🔥 12 O'CLOCK SCRAPE!" : "⚡ WHEELIE";
       }
-
-      // Коллизия переднего колеса с землей
-      if (fWheelY >= floor) {
-        bike.y = floor - halfW * sin;
-        bike.vy = 0;
-        if (bike.angle > 0.1) bike.angularVelocity -= 0.02;
-      }
-
-      // Детекция станта и падений
-      const deg = (bike.angle * 180) / Math.PI;
-
-      // Опрокидывание назад (переворот)
-      if (deg > 85) {
-        crash("Перевернулся через заднее крыло!");
-        return;
-      }
-      // Опрокидывание через руль (стоппи краш)
-      if (deg < -80) {
-        crash("Перелетел через руль!");
-        return;
-      }
-
-      // Стант: Wheelie (баланс на заднем колесе)
-      if (deg > 25 && deg <= 80 && fWheelY < floor - 10) {
-        score += Math.floor(deg / 5);
-        currentStunt = deg > 65 ? "🔥 12 O'CLOCK SCRAPE!" : "⚡ WHEELIE";
-      } 
-      // Стант: Stoppie (на переднем колесе)
-      else if (deg < -20 && deg >= -75 && rWheelY < floor - 10 && bike.vx > 0.8) {
+      // Stoppie: наклон вперед на ходу
+      else if (deg < -15 && deg >= -75 && bikeBody.velocity.x > 1.5) {
         score += 8;
-        currentStunt = "🎯 STOPPIE / ENDO";
-      } else {
-        currentStunt = "";
+        stuntText = "🎯 STOPPIE";
       }
 
-      // Обновление HUD
       document.getElementById("score").innerText = score;
-      document.getElementById("stunt-tag").innerText = currentStunt;
-      document.getElementById("speed").innerText = `${Math.floor(bike.vx * 10)} KM/H`;
-    }
-
-    function render() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      const floor = groundY();
-      const spec = BIKES[activeBikeKey];
-
-      // Отрисовка асфальта / разметки с параллаксом
-      ctx.fillStyle = "#222";
-      ctx.fillRect(0, floor + bike.wheelRadius, canvas.width, canvas.height - floor);
-      
-      ctx.strokeStyle = "#555";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(0, floor + bike.wheelRadius);
-      ctx.lineTo(canvas.width, floor + bike.wheelRadius);
-      ctx.stroke();
-
-      // Отрисовка разметки дороги
-      ctx.strokeStyle = "#eee";
-      ctx.setLineDash([30, 30]);
-      ctx.lineDashOffset = bike.x % 60;
-      ctx.beginPath();
-      ctx.moveTo(0, floor + 40);
-      ctx.lineTo(canvas.width, floor + 40);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Центрирование камеры на фиксированной позиции по X
-      ctx.save();
-      ctx.translate(canvas.width * 0.35, 0);
-
-      // Отрисовка байка и райдера
-      ctx.save();
-      ctx.translate(0, bike.y);
-      ctx.rotate(bike.angle);
-
-      const hw = spec.wheelBase / 2;
-
-      // Колеса
-      ctx.fillStyle = "#111";
-      ctx.strokeStyle = "#777";
-      ctx.lineWidth = 3;
-      
-      // Заднее колесо
-      ctx.beginPath();
-      ctx.arc(-hw, 0, bike.wheelRadius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      // Переднее колесо
-      ctx.beginPath();
-      ctx.arc(hw, 0, bike.wheelRadius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      // Рама байка
-      ctx.strokeStyle = spec.color;
-      ctx.lineWidth = 6;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(-hw, 0);
-      ctx.lineTo(0, -15);
-      ctx.lineTo(hw, 0);
-      ctx.stroke();
-
-      // Вилка и руль
-      ctx.strokeStyle = "#aaa";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(hw, 0);
-      ctx.lineTo(hw - 10, -35); // руль
-      ctx.stroke();
-
-      // Тело райдера (схематично)
-      ctx.strokeStyle = "#fff";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(-5, -20); // таз
-      ctx.lineTo(input.leanBack ? -20 : -10, -45); // торс
-      ctx.lineTo(hw - 10, -35); // руки к рулю
-      ctx.stroke();
-
-      // Голова/шлем
-      ctx.fillStyle = "#ffd700";
-      ctx.beginPath();
-      ctx.arc(input.leanBack ? -22 : -12, -55, 7, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.restore();
-      ctx.restore();
-    }
-
-    function loop() {
-      update();
-      render();
-      requestAnimationFrame(loop);
-    }
-    requestAnimationFrame(loop);
+      document.getElementById("stunt-tag").innerText = stuntText;
+      document.getElementById("speed").innerText = `${Math.floor(bikeBody.velocity.x * 9)} KM/H`;
+    });
   </script>
 </body>
 </html>
