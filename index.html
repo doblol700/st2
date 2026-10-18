@@ -1,315 +1,189 @@
 <!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Stunt Moto TMA</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
-  <style>
-    * { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
-    body, html { width: 100%; height: 100%; overflow: hidden; background: #0d0f18; font-family: -apple-system, sans-serif; }
-    #gameCanvas { width: 100%; height: 100%; display: block; }
-    #ui-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 16px; z-index: 5; }
-    .hud { display: flex; justify-content: space-between; color: #fff; font-weight: 900; text-shadow: 0 2px 6px rgba(0,0,0,0.8); }
-    .score-box { font-size: 28px; }
-    .stunt-label { font-size: 16px; color: #ffd32a; height: 22px; font-weight: 800; }
-    .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; pointer-events: auto; }
-    .ctrl-col { display: flex; flex-direction: column; gap: 10px; }
-    .btn { background: rgba(255, 255, 255, 0.12); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 14px; color: #fff; font-size: 14px; font-weight: 800; padding: 18px 0; text-align: center; touch-action: none; }
-    .btn:active, .btn.active { transform: scale(0.96); background: rgba(255, 255, 255, 0.35); }
-    .btn-gas { background: rgba(46, 204, 113, 0.3); border-color: #2ecc71; }
-    .btn-rear-brake { background: rgba(231, 76, 60, 0.3); border-color: #e74c3c; }
-    .btn-front-brake { background: rgba(230, 126, 34, 0.3); border-color: #e67e22; }
-    #overlay-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.88); display: none; flex-direction: column; justify-content: center; align-items: center; color: #fff; pointer-events: auto; z-index: 10; }
-    .restart-btn { background: #ffd32a; color: #000; font-weight: 900; font-size: 17px; border: none; padding: 14px 44px; border-radius: 30px; margin-top: 18px; cursor: pointer; }
-  </style>
-</head>
-<body>
-
-  <canvas id="gameCanvas"></canvas>
-
-  <div id="ui-container">
-    <div class="hud">
-      <div>
-        <div class="score-box" id="score">0</div>
-        <div class="stunt-label" id="stunt-tag"></div>
-      </div>
-      <div id="speed" style="font-size: 18px; color: #888;">0 KM/H</div>
-    </div>
-    <div class="controls">
-      <div class="ctrl-col">
-        <div class="btn" id="btn-lean-back">ВЕС НАЗАД</div>
-        <div class="btn btn-rear-brake" id="btn-rear-brake">ЗАДНИЙ ТОРМОЗ</div>
-      </div>
-      <div class="ctrl-col">
-        <div class="btn btn-front-brake" id="btn-front-brake">ПЕРЕДНИЙ ТОРМОЗ</div>
-        <div class="btn btn-gas" id="btn-gas">ГАЗ</div>
-      </div>
-    </div>
-  </div>
-
-  <div id="overlay-screen">
-    <h1 style="font-size: 32px; font-weight: 900; margin-bottom: 6px;">💥 КРАШ!</h1>
-    <p style="color: #bbb; font-size: 14px;" id="crash-reason">Переворот</p>
-    <button class="restart-btn" onclick="restartGame()">ЕЩЁ РАЗ</button>
-  </div>
-
-  <script>
-    const tg = window.Telegram?.WebApp;
-    if (tg) { tg.expand(); tg.ready(); }
-
-    const canvas = document.getElementById("gameCanvas");
-    const ctx = canvas.getContext("2d");
-
-    function resize() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
-    window.addEventListener("resize", resize);
-    resize();
-
-    // Исправленная строка импорта: добавлен Vector
-    const { Engine, World, Bodies, Composite, Constraint, Body, Vector } = Matter;
-    const engine = Engine.create();
-    const world = engine.world;
-
-    const input = { gas: false, rearBrake: false, frontBrake: false, leanBack: false };
-    function bind(id, prop) {
-      const el = document.getElementById(id);
-      const on = (e) => { e.preventDefault(); input[prop] = true; el.classList.add("active"); };
-      const off = (e) => { e.preventDefault(); input[prop] = false; el.classList.remove("active"); };
-      el.addEventListener("touchstart", on);
-      el.addEventListener("touchend", off);
-      el.addEventListener("mousedown", on);
-      el.addEventListener("mouseup", off);
-    }
-    bind("btn-gas", "gas");
-    bind("btn-rear-brake", "rearBrake");
-    bind("btn-front-brake", "frontBrake");
-    bind("btn-lean-back", "leanBack");
-
-    const terrainSegments = [];
-    function buildTerrain() {
-      const baseY = canvas.height * 0.72;
-      let currX = -200;
-      let currY = baseY;
-      for (let i = 0; i < 50; i++) {
-        let width = 220;
-        let angle = 0;
-        if (i > 3 && i % 5 === 0) angle = -0.16;
-        else if (i > 3 && (i - 1) % 5 === 0) angle = 0.16;
-        const nextX = currX + Math.cos(angle) * width;
-        const nextY = currY + Math.sin(angle) * width;
-        const midX = (currX + nextX) / 2;
-        const midY = (currY + nextY) / 2;
-        const seg = Bodies.rectangle(midX, midY + 40, width, 80, { isStatic: true, angle: angle, friction: 0.95 });
-        terrainSegments.push({ body: seg, x1: currX, y1: currY, x2: nextX, y2: nextY });
-        Composite.add(world, seg);
-        currX = nextX;
-        currY = nextY;
-      }
-    }
-    buildTerrain();
-
-    let bikeBody, rearWheel, frontWheel, rearSuspension, frontSuspension;
-    let isCrashed = false;
-    let score = 0;
-
-    function buildMoto(x, y) {
-      const group = Body.nextGroup(true);
-      bikeBody = Bodies.rectangle(x, y, 64, 18, { collisionFilter: { group: group }, density: 0.003 });
-      const wheelOpts = { collisionFilter: { group: group }, friction: 1.0, density: 0.0025 };
-      rearWheel = Bodies.circle(x - 36, y + 25, 18, wheelOpts);
-      frontWheel = Bodies.circle(x + 36, y + 25, 18, wheelOpts);
-
-      rearSuspension = Constraint.create({ bodyA: bikeBody, pointA: { x: -32, y: 10 }, bodyB: rearWheel, stiffness: 0.22, damping: 0.1, length: 22 });
-      frontSuspension = Constraint.create({ bodyA: bikeBody, pointA: { x: 32, y: 10 }, bodyB: frontWheel, stiffness: 0.25, damping: 0.1, length: 22 });
-      
-      const rearAxle = Constraint.create({ bodyA: bikeBody, pointA: { x: -10, y: 8 }, bodyB: rearWheel, stiffness: 0.22, damping: 0.1, length: 32 });
-      const frontAxle = Constraint.create({ bodyA: bikeBody, pointA: { x: 10, y: 8 }, bodyB: frontWheel, stiffness: 0.25, damping: 0.1, length: 32 });
-
-      Composite.add(world, [bikeBody, rearWheel, frontWheel, rearSuspension, frontSuspension, rearAxle, frontAxle]);
-    }
-    buildMoto(180, canvas.height * 0.6);
-
-    function triggerCrash(reason) {
-      if (isCrashed) return;
-      isCrashed = true;
-      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("error");
-      document.getElementById("crash-reason").innerText = reason;
-      document.getElementById("overlay-screen").style.display = "flex";
-    }
-
-    window.restartGame = function() {
-      const allBodies = Composite.allBodies(world);
-      const allConstraints = Composite.allConstraints(world);
-      allBodies.forEach(b => !b.isStatic && Composite.remove(world, b));
-      allConstraints.forEach(c => Composite.remove(world, c));
-      isCrashed = false;
-      score = 0;
-      document.getElementById("overlay-screen").style.display = "none";
-      buildMoto(180, canvas.height * 0.6);
-    };
-
-    function drawWheel(wheel) {
-      ctx.save();
-      ctx.translate(wheel.position.x, wheel.position.y);
-      ctx.rotate(wheel.angle);
-      ctx.fillStyle = "#1e222a";
-      ctx.beginPath();
-      ctx.arc(0, 0, 18, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "#e74c3c";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(0, 0, 14, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.strokeStyle = "#888";
-      ctx.lineWidth = 1.5;
-      for (let i = 0; i < 4; i++) {
-        ctx.beginPath();
-        ctx.moveTo(-13, 0);
-        ctx.lineTo(13, 0);
-        ctx.stroke();
-        ctx.rotate(Math.PI / 4);
-      }
-      ctx.restore();
-    }
-
-    function drawFork(pointA, pointB, color) {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 5;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(pointA.x, pointA.y);
-      ctx.lineTo(pointB.x, pointB.y);
-      ctx.stroke();
-    }
-
-    function loop() {
-      if (!isCrashed) {
-        if (input.gas) { rearWheel.torque = 0.065; bikeBody.torque = 0.048; }
-        if (input.rearBrake) { Body.setAngularVelocity(rearWheel, rearWheel.angularVelocity * 0.7); bikeBody.torque = -0.065; }
-        if (input.frontBrake) { Body.setAngularVelocity(frontWheel, frontWheel.angularVelocity * 0.5); if (bikeBody.velocity.x > 1.8) bikeBody.torque = -0.07; }
-        if (input.leanBack) bikeBody.torque = 0.055;
-
-        Engine.update(engine, 1000 / 60);
-
-        const deg = (bikeBody.angle * 180) / Math.PI;
-        if (deg > 85) triggerCrash("Перевернулся через крыло!");
-        if (deg < -80) triggerCrash("Перелетел через руль!");
-
-        let stuntText = "";
-        if (deg > 22 && deg <= 80) {
-          score += Math.floor(deg / 4);
-          stuntText = deg > 62 ? "🔥 12 O'CLOCK SCRAPE!" : "⚡ WHEELIE";
-        } else if (deg < -16 && deg >= -75 && bikeBody.velocity.x > 1.5) {
-          score += 8;
-          stuntText = "🎯 STOPPIE";
-        }
-        document.getElementById("score").innerText = score;
-        document.getElementById("stunt-tag").innerText = stuntText;
-        document.getElementById("speed").innerText = `${Math.floor(bikeBody.velocity.x * 9)} KM/H`;
-      }
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-      grad.addColorStop(0, "#0b0c14");
-      grad.addColorStop(1, "#1c1f2e");
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      ctx.save();
-      const cameraX = canvas.width * 0.35 - bikeBody.position.x;
-      const cameraY = canvas.height * 0.55 - bikeBody.position.y;
-      ctx.translate(cameraX, cameraY);
-
-      ctx.fillStyle = "#161922";
-      ctx.strokeStyle = "#f39c12";
-      ctx.lineWidth = 4;
-      terrainSegments.forEach(seg => {
-        ctx.beginPath();
-        ctx.moveTo(seg.x1, seg.y1);
-        ctx.lineTo(seg.x2, seg.y2);
-        ctx.lineTo(seg.x2, seg.y2 + 300);
-        ctx.lineTo(seg.x1, seg.y1 + 300);
-        ctx.closePath();
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(seg.x1, seg.y1);
-        ctx.lineTo(seg.x2, seg.y2);
-        ctx.stroke();
-      });
-
-      const pRear = Vector.add(bikeBody.position, Vector.rotate({ x: -32, y: 10 }, bikeBody.angle));
-      const pFront = Vector.add(bikeBody.position, Vector.rotate({ x: 32, y: 10 }, bikeBody.angle));
-      drawFork(pRear, rearWheel.position, "#7f8c8d");
-      drawFork(pFront, frontWheel.position, "#f1c40f");
-
-      drawWheel(rearWheel);
-      drawWheel(frontWheel);
-
-      ctx.save();
-      ctx.translate(bikeBody.position.x, bikeBody.position.y);
-      ctx.rotate(bikeBody.angle);
-
-      ctx.fillStyle = "#e74c3c";
-      ctx.beginPath();
-      ctx.moveTo(-35, 5);
-      ctx.lineTo(-20, -12);
-      ctx.lineTo(10, -12);
-      ctx.lineTo(32, -4);
-      ctx.lineTo(15, 8);
-      ctx.lineTo(-30, 8);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.strokeStyle = "#111";
-      ctx.lineWidth = 5;
-      ctx.beginPath();
-      ctx.moveTo(-22, -13);
-      ctx.lineTo(2, -13);
-      ctx.stroke();
-
-      ctx.strokeStyle = "#fff";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(18, -8);
-      ctx.lineTo(22, -26);
-      ctx.stroke();
-
-      ctx.strokeStyle = "#3498db";
-      ctx.lineWidth = 5;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(-8, -14);
-      ctx.lineTo(input.leanBack ? -24 : -12, -36);
-      ctx.lineTo(22, -26);
-      ctx.stroke();
-
-      ctx.strokeStyle = "#2c3e50";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(-8, -14);
-      ctx.lineTo(2, -2);
-      ctx.stroke();
-
-      ctx.fillStyle = "#f1c40f";
-      ctx.beginPath();
-      ctx.arc(input.leanBack ? -26 : -14, -46, 8, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = "#111";
-      ctx.beginPath();
-      ctx.arc(input.leanBack ? -23 : -11, -46, 4, -0.5, 0.5);
-      ctx.fill();
-
-      ctx.restore();
-      ctx.restore();
-      requestAnimationFrame(loop);
-    }
-    requestAnimationFrame(loop);
-  </script>
-</body>
-</html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Stunt Rider</title>
+<style>
+:root{--bg:#10152b;--pn:rgba(14,18,38,.9);--tx:#f3f5ff;--mt:#9aa3c7;--ac:#ffb020;--bt:rgba(255,255,255,.12);color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:light){:root:not([data-theme="dark"]){--pn:rgba(255,255,255,.94);--tx:#161a33;--mt:#555d85;--bt:rgba(20,24,50,.1);color-scheme:light}}
+:root[data-theme="dark"]{--pn:rgba(14,18,38,.9);--tx:#f3f5ff;--mt:#9aa3c7;--bt:rgba(255,255,255,.12)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);touch-action:none;user-select:none;-webkit-user-select:none;font-family:system-ui,-apple-system,sans-serif;color:var(--tx)}
+canvas{position:fixed;inset:0;width:100%;height:100%}
+#ctl{position:fixed;left:0;right:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;justify-content:space-between;padding:0 12px;pointer-events:none}
+.g{display:flex;gap:10px}
+.b{pointer-events:auto;width:74px;height:74px;border-radius:22px;border:2px solid rgba(255,255,255,.35);background:rgba(0,0,0,.35);color:#fff;font:700 13px system-ui;display:flex;flex-direction:column;align-items:center;justify-content:center;touch-action:none;backdrop-filter:blur(4px)}
+.b span{font-size:26px;line-height:1}
+.b.on{background:var(--ac);color:#111;border-color:#fff}
+#bG{width:92px;background:rgba(255,176,32,.35)}
+.ov{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:20px;background:var(--pn);text-align:center;overflow:auto}
+.hide{display:none}
+h1{margin:0;font-size:30px;letter-spacing:1px}
+p{margin:0;color:var(--mt);font-size:14px;max-width:320px}
+.k{width:min(320px,100%);padding:12px;border-radius:16px;border:2px solid var(--bt);background:var(--bt);color:var(--tx);font:700 17px system-ui;display:flex;justify-content:space-between;align-items:center}
+.k small{font-weight:500;color:var(--mt);font-size:12px}
+.k i{width:14px;height:14px;border-radius:50%;display:inline-block;margin-right:8px}
+.k:active{transform:scale(.98)}
+.big{background:var(--ac);color:#111;border:0;justify-content:center}
+</style></head><body>
+<canvas id="c"></canvas>
+<div id="ctl" class="hide">
+ <div class="g"><button class="b" id="bL"><span>↶</span>назад</button><button class="b" id="bR"><span>↷</span>вперёд</button></div>
+ <div class="g"><button class="b" id="bB"><span>■</span>тормоз</button><button class="b" id="bG"><span>▲</span>ГАЗ</button></div>
+</div>
+<div id="menu" class="ov">
+ <h1>STUNT RIDER</h1>
+ <p>Газ + «назад» — уилли. Тормоз + «вперёд» — стоппи. В воздухе газ поднимает нос, тормоз опускает. Приземляйся на колёса!</p>
+ <div id="list" style="display:flex;flex-direction:column;gap:8px;width:100%;align-items:center"></div>
+ <p id="bestm"></p>
+</div>
+<div id="over" class="ov hide">
+ <h1 id="ot">Авария</h1>
+ <p id="os"></p>
+ <button class="k big" id="again">Ещё раз</button>
+ <button class="k" id="tomenu">Сменить байк</button>
+</div>
+<script>
+(()=>{
+const tg=window.Telegram&&window.Telegram.WebApp;
+if(tg){try{tg.ready();tg.expand();tg.disableVerticalSwipes&&tg.disableVerticalSwipes()}catch(e){}}
+const hap=t=>{try{tg&&tg.HapticFeedback.impactOccurred(t)}catch(e){}};
+const $=i=>document.getElementById(i),cv=$('c'),cx=cv.getContext('2d');
+const g=9.81,TS=.25,SUB=10;
+let bike,S=null,T=[0],gSl=0,mode='menu',best=0,cam={x:5,y:-1,vw:10},SC=1,W=1,H=1;
+try{best=+localStorage.getItem('sr_best')||0}catch(e){}
+const inp={gas:0,brake:0,back:0,fwd:0};
+// m=масса(байк+гонщик), bx/fx=расстояние от центра масс до задней/передней оси, r=радиус колеса, h=высота ЦМ,
+// F=макс. тяга в долях веса, vm=макс. скорость м/с, ky=радиус инерции, sm=ход подвески, sg=просадка, mw=масса колеса
+const BIKES=[
+{n:'Скутер',c:'#38d6c4',M:150,bx:.55,fx:.65,r:.15,h:.62,F:.55,vm:18,ky:.42,sm:.10,sg:.045,mw:5},
+{n:'Питбайк',c:'#ff5a3c',M:125,bx:.5,fx:.6,r:.21,h:.66,F:.8,vm:22,ky:.4,sm:.14,sg:.05,mw:6},
+{n:'Эндуро',c:'#ffb020',M:190,bx:.72,fx:.73,r:.33,h:.86,F:1,vm:27,ky:.5,sm:.22,sg:.08,mw:9},
+{n:'Кросс 450',c:'#7aa2ff',M:175,bx:.72,fx:.76,r:.33,h:.85,F:1.2,vm:30,ky:.5,sm:.26,sg:.09,mw:8}];
+BIKES.forEach(b=>{b.hy=b.h-b.r+b.sg;b.I=b.M*b.ky*b.ky;b.mu=1.05;b.Iw=.9*b.mw*b.r*b.r;const wb=b.bx+b.fx;b.k=[b.M*g*(b.fx/wb)/b.sg,b.M*g*(b.bx/wb)/b.sg]});
+BIKES.forEach(b=>{const e=document.createElement('button');e.className='k';e.innerHTML='<span><i style="background:'+b.c+'"></i>'+b.n+'</span><small>'+Math.round(b.vm*3.6)+' км/ч · '+b.M+' кг · тяга '+b.F+'g</small>';e.onclick=()=>start(b);$('list').appendChild(e)});
+function rs(){const d=Math.min(devicePixelRatio||1,2);W=cv.width=innerWidth*d;H=cv.height=innerHeight*d}
+addEventListener('resize',rs);rs();
+addEventListener('contextmenu',e=>e.preventDefault());
+// ---------- ландшафт ----------
+function add(len,f){const n=Math.round(len/TS),b=T[T.length-1];for(let j=1;j<=n;j++)T.push(b-f(j/n))}
+const kick=(R,L)=>{add(L,t=>R*t*t);add(R*5+3,t=>-R*(1-(1-t)*(1-t)));add(6,()=>0)};
+function nextSeg(){const x=(T.length-1)*TS,D=Math.min(1,x/500),r=Math.random(),c=Math.cos;
+ if(x<30||r<.16)add(8+Math.random()*8,()=>0);
+ else if(r<.34){const A=.5+Math.random()*.6,n=1+(Math.random()*2|0);add(n*9,t=>A*(1-c(6.283*n*t))/2);add(4,()=>0)}
+ else if(r<.5){const n=4+(Math.random()*3|0);add(n*2.4,t=>.3*(1-c(6.283*n*t))/2);add(5,()=>0)}
+ else if(r<.78)kick(.7+Math.random()*.7+D*.4,3.5);
+ else if(r<.9)kick(1.5+Math.random()*.6+D*.5,4.6);
+ else{const R=2+Math.random()*.5;add(3.2,t=>R*t*t*t);add(R*4+4,t=>-R*(1-(1-t)*(1-t)));add(8,()=>0)}}
+function G(x){if(x<0){gSl=0;return T[0]}const f=x/TS,i=f|0;if(i+2>=T.length){gSl=0;return T[T.length-1]}
+ const t=f-i,t2=t*t,t3=t2*t,y0=T[i],y1=T[i+1],m0=(y1-T[i?i-1:0])*.5,m1=(T[i+2]-y0)*.5;
+ gSl=((6*t2-6*t)*y0+(3*t2-4*t+1)*m0+(-6*t2+6*t)*y1+(3*t2-2*t)*m1)/TS;
+ return(2*t3-3*t2+1)*y0+(t3-2*t2+t)*m0+(-2*t3+3*t2)*y1+(t3-t2)*m1}
+function gen(x){while((T.length-1)*TS<x+80)nextSeg()}
+// ---------- старт ----------
+function start(b){bike=b;T=[0];gen(100);const v=4;
+ S={x:3,y:-b.h-.02,a:0,vx:v,vy:0,w:0,lean:0,wr:[v/b.r,v/b.r],th:[0,0],cp:[0,0],hit:[0,0],air:0,rot:0,wh:0,st:0,score:0,dist:0,combo:0,lastB:-9,msg:'',msgT:0,t:0,dead:0,rd:null};
+ cam.x=5;cam.y=-1;cam.vw=10;mode='play';$('menu').classList.add('hide');$('over').classList.add('hide');$('ctl').classList.remove('hide')}
+// ---------- физика ----------
+function phys(dt){const b=bike,s=S,c=Math.cos(s.a),sn=Math.sin(s.a),live=!(s.dead>0);
+ const sh=-.3*s.lean,th=live&&inp.gas?1:0,br=live&&inp.brake?1:0;
+ let Fx=-.35*Math.hypot(s.vx,s.vy)*s.vx,Fy=b.M*g-.35*Math.hypot(s.vx,s.vy)*s.vy,tau=0,any=0;
+ for(let i=0;i<2;i++){
+  const lx=(i?b.fx:-b.bx)-sh,ly=b.hy,rx=lx*c-ly*sn,ry=lx*sn+ly*c,px=s.x+rx,py=s.y+ry;
+  const hvx=s.vx-s.w*ry,hvy=s.vy+s.w*rx,gy=G(px),m=gSl,q=1/Math.sqrt(1+m*m),d=(gy-py)*q,p=b.r-d;
+  const k=b.k[i],cd=2*.4*Math.sqrt(k*b.M*.5);let Ft=0;
+  s.cp[i]=Math.max(0,Math.min(p,b.sm+.03));
+  if(p>0){const nx=m*q,ny=-q,tx=q,ty=m*q,vn=hvx*nx+hvy*ny,vt=hvx*tx+hvy*ty;
+   let N=k*p-cd*vn;if(p>b.sm)N+=k*8*(p-b.sm);if(N<0)N=0;
+   Ft=-b.mu*N*Math.max(-1,Math.min(1,(vt-s.wr[i]*b.r)/.8));
+   const fx=N*nx+Ft*tx,fy=N*ny+Ft*ty;Fx+=fx;Fy+=fy;tau+=rx*fy-ry*fx;s.hit[i]=1;any=1}
+  // момент двигателя/тормоза на колесо; реакция - на раму (отсюда уилли и поведение газа/тормоза в воздухе)
+  let Td=0;if(i===0){const v=Math.max(0,s.wr[0]*b.r);Td=th*b.F*b.M*g*Math.max(0,1-v/b.vm)*b.r}
+  const w0=s.wr[i]+(Td-Ft*b.r)/b.Iw*dt,Tb=br*b.M*g*b.r*(i?.45:.35),dw=Tb/b.Iw*dt;
+  const w1=w0>0?Math.max(0,w0-dw):Math.min(0,w0+dw);
+  tau+=-Td+(w0-w1)*b.Iw/dt;s.wr[i]=w1*(1-.15*dt);s.th[i]+=s.wr[i]*dt}
+ if(live)tau+=-s.lean*b.I*(any?1.5:5); // наклон корпуса гонщика
+ s.vx+=Fx/b.M*dt;s.vy+=Fy/b.M*dt;s.w+=tau/b.I*dt;s.w*=1-.05*dt;
+ s.x+=s.vx*dt;s.y+=s.vy*dt;s.a+=s.w*dt}
+function pts(){const s=S,b=bike,hx=-.18-.3*s.lean*-2.2*-1*-1,t=.45-s.lean*.55,hip=[-.18+(-.3*s.lean)*2.2,-.36];
+ const sh=[hip[0]+Math.sin(t)*.55,hip[1]-Math.cos(t)*.55],head=[sh[0]+Math.sin(t)*.2,sh[1]-Math.cos(t)*.2];
+ return{hip,sh,head,bars:[b.fx-.24,-.6],tail:[-b.bx-.12,-.3]}}
+function toW(p){const s=S,sh=-.3*s.lean,c=Math.cos(s.a),n=Math.sin(s.a),x=p[0]-sh,y=p[1];return{x:s.x+x*c-y*n,y:s.y+x*n+y*c}}
+function bank(p,l){const s=S;s.combo=s.t-s.lastB<4?s.combo+1:1;const pts=Math.round(p*s.combo);s.score+=pts;s.msg=l+(s.combo>1?' ×'+s.combo:'')+'  +'+pts;s.msgT=2.5;s.lastB=s.t}
+function crash(why){const s=S;if(s.dead>0)return;s.dead=.001;s.msg=why;s.msgT=3;s.combo=0;const h=toW(pts().head);
+ s.rd={x:h.x,y:h.y,vx:s.vx*.95+Math.random()-.5,vy:s.vy-2,a:s.a,w:s.w*.8+(Math.random()-.5)*4};hap('heavy')}
+function tricks(dt){const s=S,r=s.hit[0],f=s.hit[1],any=r||f;s.t+=dt;if(s.msgT>0)s.msgT-=dt;G(s.x);const rel=s.a-Math.atan(gSl);
+ if(s.dead>0){s.dead+=dt;if(s.rd){const d=s.rd;d.vy+=g*dt;d.x+=d.vx*dt;d.y+=d.vy*dt;d.a+=d.w*dt;const gy=G(d.x);if(d.y>gy-.25){d.y=gy-.25;if(d.vy>0)d.vy*=-.25;d.vx*=.97;d.w*=.96}}
+  if(s.dead>1.6&&mode==='play')over();return}
+ s.dist=Math.max(s.dist,s.x-3);
+ if(!any){s.air+=dt;s.rot+=s.w*dt}
+ else{if(s.air>.3){const fl=Math.floor((Math.abs(s.rot)+1.3)/6.283);
+   if(Math.abs(rel)>1.05){crash('Неудачное приземление');return}
+   if(fl>0)bank(700*fl*fl,(s.rot<0?'БЭКФЛИП':'ФРОНТФЛИП')+(fl>1?' ×'+fl:''));
+   else if(s.air>.7)bank(Math.round(s.air*90),'ПРЫЖОК '+s.air.toFixed(1)+' с');
+   hap('medium')}
+  s.air=0;s.rot=0}
+ if(r&&!f&&rel<-.22)s.wh+=dt;else{if(s.wh>.6)bank(Math.round(s.wh*130),'УИЛЛИ '+s.wh.toFixed(1)+' с');s.wh=0}
+ if(f&&!r&&rel>.1)s.st+=dt;else{if(s.st>.5)bank(Math.round(s.st*160),'СТОППИ '+s.st.toFixed(1)+' с');s.st=0}
+ const P=pts();for(const k of['head','bars','tail']){const w=toW(P[k]);if(G(w.x)-w.y<(k==='head'?.12:.04)){crash('Авария');return}}}
+function over(){mode='over';const tot=S.score+Math.floor(S.dist);if(tot>best){best=tot;try{localStorage.setItem('sr_best',best)}catch(e){}}
+ $('ot').textContent=S.msg||'Авария';$('os').innerHTML='Очки: <b>'+tot+'</b> · дистанция '+Math.floor(S.dist)+' м<br>Рекорд: '+best;$('over').classList.remove('hide');$('ctl').classList.add('hide')}
+// ---------- отрисовка ----------
+const X=x=>(x-cam.x)*SC+W/2,Y=y=>(y-cam.y)*SC+H*.55;
+function ln(a,b,c,d){cx.beginPath();cx.moveTo(a,b);cx.lineTo(c,d);cx.stroke()}
+function draw(){SC=W/cam.vw;const u=W/360;
+ let gr=cx.createLinearGradient(0,0,0,H);gr.addColorStop(0,'#162052');gr.addColorStop(.55,'#6a3d8f');gr.addColorStop(1,'#ff9966');cx.fillStyle=gr;cx.fillRect(0,0,W,H);
+ [[.05,'#3a2a6b',70,90,.46],[.12,'#2a1f52',50,60,.52]].forEach(([k,col,a,sc,y])=>{cx.fillStyle=col;cx.beginPath();cx.moveTo(0,H);for(let x=0;x<=W;x+=12){const o=x+cam.x*SC*k;cx.lineTo(x,H*y+a*u*(Math.sin(o/(sc*u))+.5*Math.sin(o/(sc*u*.37))))}cx.lineTo(W,H);cx.fill()});
+ cx.beginPath();cx.moveTo(0,H);const pts=[];for(let x=0;x<=W+8;x+=6){const wx=cam.x+(x-W/2)/SC;pts.push([x,Y(G(wx))])}
+ pts.forEach(p=>cx.lineTo(p[0],p[1]));cx.lineTo(W,H);cx.closePath();
+ gr=cx.createLinearGradient(0,0,0,H);gr.addColorStop(0,'#5a3b27');gr.addColorStop(1,'#2a1a12');cx.fillStyle=gr;cx.fill();
+ cx.strokeStyle='#5fd35f';cx.lineWidth=5*u;cx.beginPath();pts.forEach((p,i)=>i?cx.lineTo(p[0],p[1]):cx.moveTo(p[0],p[1]));cx.stroke();
+ cx.strokeStyle='rgba(0,0,0,.25)';cx.lineWidth=.07*SC;const x0=Math.floor((cam.x-cam.vw/2)/3)*3;
+ for(let x=x0;x<cam.x+cam.vw/2+3;x+=3){const y=G(x);ln(X(x),Y(y+.2),X(x),Y(y+.6))}
+ if(S){drawBike();hud(u)}}
+function drawBike(){const s=S,b=bike,sh=-.3*s.lean,P=pts(),dead=s.dead>0;
+ cx.save();cx.translate(X(s.x),Y(s.y));cx.rotate(s.a);cx.scale(SC,SC);cx.translate(-sh,0);cx.lineCap='round';cx.lineJoin='round';
+ const hy=[b.hy-s.cp[0],b.hy-s.cp[1]],rx=-b.bx,fx=b.fx,L=(a,c,d,e)=>{cx.beginPath();cx.moveTo(a,c);cx.lineTo(d,e);cx.stroke()};
+ for(let i=0;i<2;i++){const x=i?fx:rx,y=hy[i];cx.lineWidth=.09;cx.strokeStyle='#111';cx.beginPath();cx.arc(x,y,b.r-.045,0,7);cx.stroke();
+  cx.lineWidth=.025;cx.strokeStyle='#cfd3e6';cx.beginPath();cx.arc(x,y,b.r*.62,0,7);cx.stroke();
+  for(let k=0;k<3;k++){const q=s.th[i]+k*1.047,cc=Math.cos(q)*b.r*.6,ss=Math.sin(q)*b.r*.6;L(x+cc,y+ss,x-cc,y-ss)}}
+ cx.strokeStyle='#2a2f45';cx.lineWidth=.07;L(-.15,.12,rx,hy[0]);cx.lineWidth=.08;L(fx-.28,-.5,fx,hy[1]);
+ cx.fillStyle=b.c;cx.beginPath();[[-b.bx-.12,-.3],[-.1,-.36],[.25,-.46],[fx-.3,-.42],[fx-.3,.05],[-.05,.14],[-.3,.02]].forEach((p,i)=>i?cx.lineTo(p[0],p[1]):cx.moveTo(p[0],p[1]));cx.fill();
+ cx.fillStyle='#3b4056';cx.fillRect(-.2,-.02,.42,.22);cx.strokeStyle='#111';cx.lineWidth=.07;L(-b.bx-.1,-.33,-.05,-.37);
+ cx.strokeStyle='#999';cx.lineWidth=.05;L(-.1,.1,-b.bx-.2,-.08);
+ cx.strokeStyle='#2a2f45';cx.lineWidth=.05;L(fx-.28,-.5,P.bars[0],P.bars[1]);
+ if(!dead){cx.strokeStyle='#1d2a4a';cx.lineWidth=.12;const kn=[P.hip[0]+.3,-.12];L(P.hip[0],P.hip[1],kn[0],kn[1]);L(kn[0],kn[1],.05,.1);
+  cx.strokeStyle=b.c;cx.lineWidth=.16;L(P.hip[0],P.hip[1],P.sh[0],P.sh[1]);
+  cx.strokeStyle='#e8e8f0';cx.lineWidth=.08;const el=[(P.sh[0]+P.bars[0])/2,(P.sh[1]+P.bars[1])/2+.12];L(P.sh[0],P.sh[1],el[0],el[1]);L(el[0],el[1],P.bars[0],P.bars[1]);
+  cx.fillStyle='#fff';cx.beginPath();cx.arc(P.head[0],P.head[1],.12,0,7);cx.fill();cx.fillStyle='#222';cx.fillRect(P.head[0]+.02,P.head[1]-.04,.11,.06)}
+ cx.restore();
+ if(s.rd){const d=s.rd;cx.save();cx.translate(X(d.x),Y(d.y));cx.rotate(d.a);cx.scale(SC,SC);cx.lineCap='round';cx.strokeStyle='#e8e8f0';cx.lineWidth=.12;
+  [[0,-.3,0,.3],[0,-.2,.3,.05],[0,-.2,-.3,.1],[0,.3,.25,.65],[0,.3,-.2,.65]].forEach(a=>L(...a));cx.fillStyle='#fff';cx.beginPath();cx.arc(0,-.42,.12,0,7);cx.fill();cx.restore()}}
+function hud(u){const s=S;cx.textAlign='left';cx.fillStyle='#fff';cx.font='800 '+26*u+'px system-ui';cx.shadowColor='rgba(0,0,0,.6)';cx.shadowBlur=6*u;
+ cx.fillText(s.score+Math.floor(s.dist),16*u,(46+(tg?0:0))*u);cx.font='600 '+12*u+'px system-ui';cx.fillText('ОЧКИ · рекорд '+best,16*u,64*u);
+ cx.textAlign='right';cx.font='800 '+22*u+'px system-ui';cx.fillText(Math.round(Math.hypot(s.vx,s.vy)*3.6)+' км/ч',W-16*u,46*u);cx.font='600 '+12*u+'px system-ui';cx.fillText(Math.floor(s.dist)+' м',W-16*u,64*u);
+ cx.textAlign='center';let live=s.wh>.3?'УИЛЛИ '+s.wh.toFixed(1)+' с':s.st>.3?'СТОППИ '+s.st.toFixed(1)+' с':s.air>.4?'В ПОЛЁТЕ '+s.air.toFixed(1)+' с':'';
+ if(live){cx.font='800 '+20*u+'px system-ui';cx.fillStyle='#ffd34d';cx.fillText(live,W/2,110*u)}
+ if(s.msgT>0){cx.globalAlpha=Math.min(1,s.msgT);cx.font='900 '+24*u+'px system-ui';cx.fillStyle=s.dead>0?'#ff6b6b':'#7dffb0';cx.fillText(s.msg,W/2,150*u);cx.globalAlpha=1}
+ cx.shadowBlur=0}
+// ---------- цикл ----------
+let last=0;
+function loop(t){const dt=Math.min(.05,(t-last)/1000||.016);last=t;
+ if(S&&mode!=='menu'){const s=S,tl=s.dead>0?0:inp.back-inp.fwd;s.lean+=(tl-s.lean)*Math.min(1,dt*8);s.hit=[0,0];gen(s.x+60);
+  for(let i=0;i<SUB;i++)phys(dt/SUB);tricks(dt);
+  cam.x+=(s.x+Math.max(0,s.vx)*.4-cam.x)*Math.min(1,dt*4);cam.y+=(s.y-.4-cam.y)*Math.min(1,dt*3);cam.vw+=(9+Math.min(30,Math.hypot(s.vx,s.vy))*.28-cam.vw)*Math.min(1,dt*1.5)}
+ else{cam.x=6;cam.y=-1;gen(100)}
+ draw();requestAnimationFrame(loop)}
+// ---------- ввод ----------
+function hold(id,k){const e=$(id),on=v=>ev=>{ev.preventDefault();inp[k]=v;e.classList.toggle('on',!!v)};
+ e.addEventListener('pointerdown',ev=>{try{e.setPointerCapture(ev.pointerId)}catch(x){}on(1)(ev)});
+ ['pointerup','pointercancel','lostpointercapture'].forEach(n=>e.addEventListener(n,on(0)))}
+hold('bG','gas');hold('bB','brake');hold('bL','back');hold('bR','fwd');
+const km={ArrowRight:'gas',KeyD:'gas',ArrowLeft:'brake',KeyA:'brake',ArrowUp:'back',KeyW:'back',ArrowDown:'fwd',KeyS:'fwd'};
+addEventListener('keydown',e=>{if(km[e.code]){inp[km[e.code]]=1;e.preventDefault()}});
+addEventListener('keyup',e=>{if(km[e.code])inp[km[e.code]]=0});
+$('again').onclick=()=>start(bike);
+$('tomenu').onclick=()=>{mode='menu';S=null;$('over').classList.add('hide');$('menu').classList.remove('hide');$('bestm').textContent=best?'Рекорд: '+best:''};
+$('bestm').textContent=best?'Рекорд: '+best:'';
+requestAnimationFrame(loop);
+})();
+</script></body></html>
