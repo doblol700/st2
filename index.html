@@ -32,7 +32,7 @@ p{margin:0;color:var(--mt);font-size:14px;max-width:320px}
 </div>
 <div id="menu" class="ov">
  <h1>STUNT RIDER</h1>
- <p>Газ + «назад» — уилли. Тормоз + «вперёд» — стоппи. В воздухе газ поднимает нос, тормоз опускает. Приземляйся на колёса!</p>
+ <p>Газ + «назад» — уилли. Тормоз плавный, с ABS (колёса не блокируются); тормоз + «вперёд» — стоппи. В воздухе газ поднимает нос, тормоз опускает. Приземляйся на колёса!</p>
  <div id="list" style="display:flex;flex-direction:column;gap:8px;width:100%;align-items:center"></div>
  <p id="bestm"></p>
 </div>
@@ -59,6 +59,7 @@ const BIKES=[
 {n:'Питбайк',c:'#ff5a3c',M:125,bx:.5,fx:.6,r:.21,h:.66,F:.8,vm:22,ky:.4,sm:.14,sg:.05,mw:6},
 {n:'Эндуро',c:'#ffb020',M:190,bx:.72,fx:.73,r:.33,h:.86,F:1,vm:27,ky:.5,sm:.22,sg:.08,mw:9},
 {n:'Кросс 450',c:'#7aa2ff',M:175,bx:.72,fx:.76,r:.33,h:.85,F:1.2,vm:30,ky:.5,sm:.26,sg:.09,mw:8}];
+BIKES.forEach((b,i)=>{b.t=['scooter','pit','enduro','moto'][i];b.hipY=b.h-[.72,.74,.92,.92][i]-.2;b.barX=b.fx-[.2,.2,.22,.22][i];b.barH=[1.03,.95,1.2,1.2][i]});
 BIKES.forEach(b=>{b.hy=b.h-b.r+b.sg;b.I=b.M*b.ky*b.ky;b.mu=1.05;b.Iw=.9*b.mw*b.r*b.r;const wb=b.bx+b.fx;b.k=[b.M*g*(b.fx/wb)/b.sg,b.M*g*(b.bx/wb)/b.sg]});
 BIKES.forEach(b=>{const e=document.createElement('button');e.className='k';e.innerHTML='<span><i style="background:'+b.c+'"></i>'+b.n+'</span><small>'+Math.round(b.vm*3.6)+' км/ч · '+b.M+' кг · тяга '+b.F+'g</small>';e.onclick=()=>start(b);$('list').appendChild(e)});
 function rs(){const d=Math.min(devicePixelRatio||1,2);W=cv.width=innerWidth*d;H=cv.height=innerHeight*d}
@@ -68,11 +69,11 @@ addEventListener('contextmenu',e=>e.preventDefault());
 function add(len,f){const n=Math.round(len/TS),b=T[T.length-1];for(let j=1;j<=n;j++)T.push(b-f(j/n))}
 const kick=(R,L)=>{add(L,t=>R*t*t);add(R*5+3,t=>-R*(1-(1-t)*(1-t)));add(6,()=>0)};
 function nextSeg(){const x=(T.length-1)*TS,D=Math.min(1,x/500),r=Math.random(),c=Math.cos;
- if(x<30||r<.16)add(8+Math.random()*8,()=>0);
- else if(r<.34){const A=.5+Math.random()*.6,n=1+(Math.random()*2|0);add(n*9,t=>A*(1-c(6.283*n*t))/2);add(4,()=>0)}
- else if(r<.5){const n=4+(Math.random()*3|0);add(n*2.4,t=>.3*(1-c(6.283*n*t))/2);add(5,()=>0)}
- else if(r<.78)kick(.7+Math.random()*.7+D*.4,3.5);
- else if(r<.9)kick(1.5+Math.random()*.6+D*.5,4.6);
+ if(x<40||r<.5)add(14+Math.random()*16,()=>0);
+ else if(r<.6){const A=.15+Math.random()*.2,n=1;add(n*14,t=>A*(1-c(6.283*n*t))/2);add(4,()=>0)}
+ else if(r<.68){const n=2+(Math.random()*2|0);add(n*2.6,t=>.13*(1-c(6.283*n*t))/2);add(8,()=>0)}
+ else if(r<.88)kick(.7+Math.random()*.7+D*.4,3.5);
+ else if(r<.95)kick(1.5+Math.random()*.6+D*.5,4.6);
  else{const R=2+Math.random()*.5;add(3.2,t=>R*t*t*t);add(R*4+4,t=>-R*(1-(1-t)*(1-t)));add(8,()=>0)}}
 function G(x){if(x<0){gSl=0;return T[0]}const f=x/TS,i=f|0;if(i+2>=T.length){gSl=0;return T[T.length-1]}
  const t=f-i,t2=t*t,t3=t2*t,y0=T[i],y1=T[i+1],m0=(y1-T[i?i-1:0])*.5,m1=(T[i+2]-y0)*.5;
@@ -81,32 +82,32 @@ function G(x){if(x<0){gSl=0;return T[0]}const f=x/TS,i=f|0;if(i+2>=T.length){gSl
 function gen(x){while((T.length-1)*TS<x+80)nextSeg()}
 // ---------- старт ----------
 function start(b){bike=b;T=[0];gen(100);const v=4;
- S={x:3,y:-b.h-.02,a:0,vx:v,vy:0,w:0,lean:0,wr:[v/b.r,v/b.r],th:[0,0],cp:[0,0],hit:[0,0],air:0,rot:0,wh:0,st:0,score:0,dist:0,combo:0,lastB:-9,msg:'',msgT:0,t:0,dead:0,rd:null};
+ S={x:3,y:-b.h-.02,a:0,vx:v,vy:0,w:0,lean:0,bp:0,wr:[v/b.r,v/b.r],th:[0,0],cp:[0,0],hit:[0,0],air:0,rot:0,wh:0,st:0,score:0,dist:0,combo:0,lastB:-9,msg:'',msgT:0,t:0,dead:0,rd:null};
  cam.x=5;cam.y=-1;cam.vw=10;mode='play';$('menu').classList.add('hide');$('over').classList.add('hide');$('ctl').classList.remove('hide')}
 // ---------- физика ----------
 function phys(dt){const b=bike,s=S,c=Math.cos(s.a),sn=Math.sin(s.a),live=!(s.dead>0);
- const sh=-.3*s.lean,th=live&&inp.gas?1:0,br=live&&inp.brake?1:0;
+ const sh=-.3*s.lean,th=live&&inp.gas?1:0,br=live&&inp.brake?1:0;s.bp+=((br?1:0)-s.bp)*Math.min(1,dt*(br?5:12));
  let Fx=-.35*Math.hypot(s.vx,s.vy)*s.vx,Fy=b.M*g-.35*Math.hypot(s.vx,s.vy)*s.vy,tau=0,any=0;
  for(let i=0;i<2;i++){
   const lx=(i?b.fx:-b.bx)-sh,ly=b.hy,rx=lx*c-ly*sn,ry=lx*sn+ly*c,px=s.x+rx,py=s.y+ry;
   const hvx=s.vx-s.w*ry,hvy=s.vy+s.w*rx,gy=G(px),m=gSl,q=1/Math.sqrt(1+m*m),d=(gy-py)*q,p=b.r-d;
-  const k=b.k[i],cd=2*.4*Math.sqrt(k*b.M*.5);let Ft=0;
+  const k=b.k[i],cd=2*.4*Math.sqrt(k*b.M*.5);let Ft=0,Nn=0;
   s.cp[i]=Math.max(0,Math.min(p,b.sm+.03));
   if(p>0){const nx=m*q,ny=-q,tx=q,ty=m*q,vn=hvx*nx+hvy*ny,vt=hvx*tx+hvy*ty;
    let N=k*p-cd*vn;if(p>b.sm)N+=k*8*(p-b.sm);if(N<0)N=0;
    Ft=-b.mu*N*Math.max(-1,Math.min(1,(vt-s.wr[i]*b.r)/.8));
-   const fx=N*nx+Ft*tx,fy=N*ny+Ft*ty;Fx+=fx;Fy+=fy;tau+=rx*fy-ry*fx;s.hit[i]=1;any=1}
+   Nn=N;const fx=N*nx+Ft*tx,fy=N*ny+Ft*ty;Fx+=fx;Fy+=fy;tau+=rx*fy-ry*fx;s.hit[i]=1;any=1}
   // момент двигателя/тормоза на колесо; реакция - на раму (отсюда уилли и поведение газа/тормоза в воздухе)
   let Td=0;if(i===0){const v=Math.max(0,s.wr[0]*b.r);Td=th*b.F*b.M*g*Math.max(0,1-v/b.vm)*b.r}
-  const w0=s.wr[i]+(Td-Ft*b.r)/b.Iw*dt,Tb=br*b.M*g*b.r*(i?.45:.35),dw=Tb/b.Iw*dt;
+  let Tb=s.bp*b.M*g*b.r*(i?.5:.4);if(Nn>0)Tb=Math.min(Tb,.92*b.mu*Nn*b.r);const w0=s.wr[i]+(Td-Ft*b.r)/b.Iw*dt,dw=Tb/b.Iw*dt;
   const w1=w0>0?Math.max(0,w0-dw):Math.min(0,w0+dw);
   tau+=-Td+(w0-w1)*b.Iw/dt;s.wr[i]=w1*(1-.15*dt);s.th[i]+=s.wr[i]*dt}
  if(live)tau+=-s.lean*b.I*(any?1.5:5); // наклон корпуса гонщика
  s.vx+=Fx/b.M*dt;s.vy+=Fy/b.M*dt;s.w+=tau/b.I*dt;s.w*=1-.05*dt;
  s.x+=s.vx*dt;s.y+=s.vy*dt;s.a+=s.w*dt}
-function pts(){const s=S,b=bike,hx=-.18-.3*s.lean*-2.2*-1*-1,t=.45-s.lean*.55,hip=[-.18+(-.3*s.lean)*2.2,-.36];
- const sh=[hip[0]+Math.sin(t)*.55,hip[1]-Math.cos(t)*.55],head=[sh[0]+Math.sin(t)*.2,sh[1]-Math.cos(t)*.2];
- return{hip,sh,head,bars:[b.fx-.24,-.6],tail:[-b.bx-.12,-.3]}}
+function pts(){const s=S,b=bike,sc=b.t==='scooter',t=(sc?.25:.45)-s.lean*.55,hip=[(sc?-.3:-.18)+(-.3*s.lean)*1.2,b.hipY];
+ const sh=[hip[0]+Math.sin(t)*.5,hip[1]-Math.cos(t)*.5],head=[sh[0]+Math.sin(t)*.17,sh[1]-Math.cos(t)*.17];
+ return{hip,sh,head,bars:[b.barX,b.h-b.barH],tail:[-b.bx-.12,b.hipY+.02]}}
 function toW(p){const s=S,sh=-.3*s.lean,c=Math.cos(s.a),n=Math.sin(s.a),x=p[0]-sh,y=p[1];return{x:s.x+x*c-y*n,y:s.y+x*n+y*c}}
 function bank(p,l){const s=S;s.combo=s.t-s.lastB<4?s.combo+1:1;const pts=Math.round(p*s.combo);s.score+=pts;s.msg=l+(s.combo>1?' ×'+s.combo:'')+'  +'+pts;s.msgT=2.5;s.lastB=s.t}
 function crash(why){const s=S;if(s.dead>0)return;s.dead=.001;s.msg=why;s.msgT=3;s.combo=0;const h=toW(pts().head);
@@ -130,28 +131,83 @@ function over(){mode='over';const tot=S.score+Math.floor(S.dist);if(tot>best){be
 // ---------- отрисовка ----------
 const X=x=>(x-cam.x)*SC+W/2,Y=y=>(y-cam.y)*SC+H*.55;
 function ln(a,b,c,d){cx.beginPath();cx.moveTo(a,b);cx.lineTo(c,d);cx.stroke()}
+function hs(n){const v=Math.sin(n*127.1)*43758.5453;return v-Math.floor(v)}
+function city(u){
+ [[.12,'#2f2c63',.26,64,0],[.28,'#252350',.34,78,1],[.5,'#1b1a3a',.42,92,2]].forEach(([k,col,hh,cw,L])=>{
+  cw*=u;const ox=cam.x*SC*k*.5,base=H*.55-cam.y*SC*k*.3,n0=Math.floor(ox/cw)-1;
+  for(let n=n0;n*cw-ox<W+cw;n++){const r1=hs(n*3.1+L*17),r2=hs(n*5.7+L*29),bw=cw*(.8+.2*r1),bh=H*hh*(.45+.8*r2),bx=n*cw-ox,by=base-bh;
+   cx.fillStyle=col;cx.fillRect(bx,by,bw+1,H);
+   if(L>0){cx.fillStyle='rgba(255,214,120,.55)';const ws=11*u,gp=7*u;for(let r=0;by+8*u+r*(ws+gp)<base-6*u;r++)for(let c=0;6*u+c*(ws+gp)<bw-ws;c++)if(hs(n*13+r*7+c*3+L)>.55)cx.fillRect(bx+6*u+c*(ws+gp),by+8*u+r*(ws+gp),ws,ws*.8)}}});
+ cx.lineCap='round';const x0=Math.floor((cam.x-cam.vw/2-2)/16)*16;
+ for(let x=x0;x<cam.x+cam.vw/2+16;x+=16){const y=G(x),tp=y-3.6;cx.strokeStyle='#4a5066';cx.lineWidth=.1*SC;ln(X(x),Y(y),X(x),Y(tp));ln(X(x),Y(tp),X(x+.9),Y(tp));
+  const lx=X(x+.9),ly=Y(tp)+.05*SC;cx.fillStyle='rgba(255,225,140,.18)';cx.beginPath();cx.arc(lx,ly,1.6*SC,0,7);cx.fill();cx.fillStyle='#ffe9a8';cx.beginPath();cx.arc(lx,ly,.14*SC,0,7);cx.fill()}}
 function draw(){SC=W/cam.vw;const u=W/360;
  let gr=cx.createLinearGradient(0,0,0,H);gr.addColorStop(0,'#162052');gr.addColorStop(.55,'#6a3d8f');gr.addColorStop(1,'#ff9966');cx.fillStyle=gr;cx.fillRect(0,0,W,H);
- [[.05,'#3a2a6b',70,90,.46],[.12,'#2a1f52',50,60,.52]].forEach(([k,col,a,sc,y])=>{cx.fillStyle=col;cx.beginPath();cx.moveTo(0,H);for(let x=0;x<=W;x+=12){const o=x+cam.x*SC*k;cx.lineTo(x,H*y+a*u*(Math.sin(o/(sc*u))+.5*Math.sin(o/(sc*u*.37))))}cx.lineTo(W,H);cx.fill()});
+ city(u);
  cx.beginPath();cx.moveTo(0,H);const pts=[];for(let x=0;x<=W+8;x+=6){const wx=cam.x+(x-W/2)/SC;pts.push([x,Y(G(wx))])}
  pts.forEach(p=>cx.lineTo(p[0],p[1]));cx.lineTo(W,H);cx.closePath();
- gr=cx.createLinearGradient(0,0,0,H);gr.addColorStop(0,'#5a3b27');gr.addColorStop(1,'#2a1a12');cx.fillStyle=gr;cx.fill();
- cx.strokeStyle='#5fd35f';cx.lineWidth=5*u;cx.beginPath();pts.forEach((p,i)=>i?cx.lineTo(p[0],p[1]):cx.moveTo(p[0],p[1]));cx.stroke();
- cx.strokeStyle='rgba(0,0,0,.25)';cx.lineWidth=.07*SC;const x0=Math.floor((cam.x-cam.vw/2)/3)*3;
- for(let x=x0;x<cam.x+cam.vw/2+3;x+=3){const y=G(x);ln(X(x),Y(y+.2),X(x),Y(y+.6))}
+ gr=cx.createLinearGradient(0,0,0,H);gr.addColorStop(0,'#383b44');gr.addColorStop(1,'#17181d');cx.fillStyle=gr;cx.fill();
+ cx.strokeStyle='#b9bcc8';cx.lineWidth=3.5*u;cx.beginPath();pts.forEach((p,i)=>i?cx.lineTo(p[0],p[1]):cx.moveTo(p[0],p[1]));cx.stroke();
+ cx.strokeStyle='rgba(255,255,255,.55)';cx.lineWidth=.09*SC;const x0=Math.floor((cam.x-cam.vw/2)/5)*5;
+ for(let x=x0;x<cam.x+cam.vw/2+5;x+=5){ln(X(x),Y(G(x)+.4),X(x+2.4),Y(G(x+2.4)+.4))}
  if(S){drawBike();hud(u)}}
+function bikeBody(L,P,hy,rx,fx){const b=bike,t=b.t,c=b.c,fb=S.bp>.05,H0=hy[0],H1=hy[1];
+ const poly=(a,col)=>{cx.fillStyle=col;cx.beginPath();a.forEach((p,i)=>i?cx.lineTo(p[0],p[1]):cx.moveTo(p[0],p[1]));cx.closePath();cx.fill()};
+ const st=(col,w)=>{cx.strokeStyle=col;cx.lineWidth=w};
+ const tl=(x,y,w,h)=>{cx.fillStyle=fb?'#ff2a2a':'#a01818';cx.fillRect(x,y,w,h)};
+ if(t==='scooter'){
+  st('#2a2f45',.06);L(.56,-.38,fx,H1);
+  st('#555c75',.05);L(-.2,-.02,rx+.04,H0-.05);
+  cx.fillStyle='#3b4056';cx.fillRect(-.55,.36,.38,.2);
+  st('#2a2f45',.06);L(-.2,.45,rx,H0);
+  poly([[-.8,-.06],[-.08,-.09],[.02,.38],[-.3,.42],[-.52,.27],[-.8,.3]],c);
+  cx.fillStyle='#2b2f40';cx.fillRect(-.05,.32,.5,.06);
+  poly([[.3,.4],[.5,.4],[.56,-.05],[.55,-.4],[.45,-.4],[.38,-.05]],c);
+  poly([[.44,-.38],[.6,-.36],[.64,-.47],[.5,-.52]],c);
+  st(c,.05);cx.beginPath();cx.arc(fx,H1,b.r+.035,-3.1,-.5);cx.stroke();
+  poly([[-.78,-.17],[-.1,-.17],[-.1,-.08],[-.78,-.08]],'#1a1a22');
+  tl(-.84,-.1,.06,.08);
+  cx.fillStyle='#fff3b0';cx.beginPath();cx.arc(.6,-.4,.045,0,7);cx.fill();
+  st('#999',.03);L(.52,-.5,.46,-.64);
+ }else if(t==='pit'){
+  st('#2a2f45',.05);L(-.05,.3,rx,H0);
+  st(c,.055);L(.4,-.3,-.4,-.12);L(.4,-.3,0,.3);L(-.4,-.12,-.05,.3);L(-.4,-.12,-.5,0);
+  cx.fillStyle='#3b4056';cx.fillRect(-.16,.02,.3,.26);cx.fillRect(-.02,-.13,.14,.18);
+  poly([[.38,-.3],[.12,-.27],[0,-.15],[.2,-.14],[.4,-.2]],c);
+  st('#1a1a22',.1);L(.06,-.16,-.52,-.08);
+  poly([[-.5,-.08],[-.7,-.2],[-.72,-.14],[-.5,0]],c);
+  st('#aab',.06);L(0,.18,-.3,.2);L(-.3,.2,-.66,-.05);
+  st('#c9cde0',.06);L(.46,-.2,fx,H1);
+  st(c,.045);cx.beginPath();cx.arc(fx,H1,b.r+.03,-2.7,-.6);cx.stroke();
+  cx.fillStyle='#fff';cx.fillRect(.44,-.3,.09,.1);tl(-.74,-.17,.04,.05);
+ }else{const m=t==='moto';
+  st('#c9cde0',.085);L(-.1,.35,rx,H0);
+  st('#666b85',.05);L(-.2,-.1,-.5,.42);
+  cx.fillStyle='#3b4056';cx.fillRect(-.32,.06,.42,.3);cx.fillStyle='#4a5070';cx.fillRect(-.1,-.1,.2,.2);
+  st('#aab',.07);cx.beginPath();cx.moveTo(.18,.12);cx.quadraticCurveTo(-.1,.4,-.4,.22);cx.lineTo(-.92,0);cx.stroke();
+  st('#c9cde0',.05);L(-.34,.38,.2,.34);
+  poly([[.5,-.36],[.05,-.3],[-.06,-.1],[.15,0],[.5,-.06]],c);
+  poly([[-.08,-.16],[-.84,-.12],[-.94,0],[-.8,.02],[-.1,.02]],c);
+  st('#17171d',.11);L(.08,-.17,-.74,-.1);
+  st('#d9dcec',.075);L(.57,-.32,fx,H1);
+  st('#555',.1);L(.57,-.32,.6,-.22);
+  st(c,.065);cx.beginPath();cx.arc(fx,H1,b.r+.09,-2.5,-.75);cx.stroke();
+  if(m){poly([[.5,-.38],[.64,-.4],[.66,-.24],[.52,-.22]],'#fff');st('#111',.025);L(.58,-.36,.58,-.27)}
+  else{cx.fillStyle='#fff3b0';cx.beginPath();cx.arc(.64,-.33,.05,0,7);cx.fill()}
+  st(c,.04);L(P.bars[0]+.04,P.bars[1],P.bars[0]-.08,P.bars[1]-.03);tl(-.97,-.07,.05,.06)
+ }}
 function drawBike(){const s=S,b=bike,sh=-.3*s.lean,P=pts(),dead=s.dead>0;
  cx.save();cx.translate(X(s.x),Y(s.y));cx.rotate(s.a);cx.scale(SC,SC);cx.translate(-sh,0);cx.lineCap='round';cx.lineJoin='round';
  const hy=[b.hy-s.cp[0],b.hy-s.cp[1]],rx=-b.bx,fx=b.fx,L=(a,c,d,e)=>{cx.beginPath();cx.moveTo(a,c);cx.lineTo(d,e);cx.stroke()};
  for(let i=0;i<2;i++){const x=i?fx:rx,y=hy[i];cx.lineWidth=.09;cx.strokeStyle='#111';cx.beginPath();cx.arc(x,y,b.r-.045,0,7);cx.stroke();
   cx.lineWidth=.025;cx.strokeStyle='#cfd3e6';cx.beginPath();cx.arc(x,y,b.r*.62,0,7);cx.stroke();
   for(let k=0;k<3;k++){const q=s.th[i]+k*1.047,cc=Math.cos(q)*b.r*.6,ss=Math.sin(q)*b.r*.6;L(x+cc,y+ss,x-cc,y-ss)}}
- cx.strokeStyle='#2a2f45';cx.lineWidth=.07;L(-.15,.12,rx,hy[0]);cx.lineWidth=.08;L(fx-.28,-.5,fx,hy[1]);
- cx.fillStyle=b.c;cx.beginPath();[[-b.bx-.12,-.3],[-.1,-.36],[.25,-.46],[fx-.3,-.42],[fx-.3,.05],[-.05,.14],[-.3,.02]].forEach((p,i)=>i?cx.lineTo(p[0],p[1]):cx.moveTo(p[0],p[1]));cx.fill();
- cx.fillStyle='#3b4056';cx.fillRect(-.2,-.02,.42,.22);cx.strokeStyle='#111';cx.lineWidth=.07;L(-b.bx-.1,-.33,-.05,-.37);
- cx.strokeStyle='#999';cx.lineWidth=.05;L(-.1,.1,-b.bx-.2,-.08);
- cx.strokeStyle='#2a2f45';cx.lineWidth=.05;L(fx-.28,-.5,P.bars[0],P.bars[1]);
- if(!dead){cx.strokeStyle='#1d2a4a';cx.lineWidth=.12;const kn=[P.hip[0]+.3,-.12];L(P.hip[0],P.hip[1],kn[0],kn[1]);L(kn[0],kn[1],.05,.1);
+ bikeBody(L,P,hy,rx,fx);
+ 
+ 
+ 
+ 
+ if(!dead){cx.strokeStyle='#1d2a4a';cx.lineWidth=.12;const ft=b.t==='scooter'?[.2,b.h-.25]:[-.02,b.h-.38],kn=[(P.hip[0]+ft[0])/2+.22,(P.hip[1]+ft[1])/2-.02];L(P.hip[0],P.hip[1],kn[0],kn[1]);L(kn[0],kn[1],ft[0],ft[1]);
   cx.strokeStyle=b.c;cx.lineWidth=.16;L(P.hip[0],P.hip[1],P.sh[0],P.sh[1]);
   cx.strokeStyle='#e8e8f0';cx.lineWidth=.08;const el=[(P.sh[0]+P.bars[0])/2,(P.sh[1]+P.bars[1])/2+.12];L(P.sh[0],P.sh[1],el[0],el[1]);L(el[0],el[1],P.bars[0],P.bars[1]);
   cx.fillStyle='#fff';cx.beginPath();cx.arc(P.head[0],P.head[1],.12,0,7);cx.fill();cx.fillStyle='#222';cx.fillRect(P.head[0]+.02,P.head[1]-.04,.11,.06)}
