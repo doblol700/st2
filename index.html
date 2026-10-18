@@ -3,9 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Realistic Stunt Moto</title>
+  <title>Stunt Moto TMA</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <!-- Подключаем легкий физический 2D-движок Matter.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <style>
     * {
@@ -19,17 +18,14 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: #0f1015;
+      background: #0d0f18;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
-    #canvas-container {
+    #gameCanvas {
       width: 100%;
       height: 100%;
-      position: absolute;
-      top: 0;
-      left: 0;
+      display: block;
     }
-    /* UI Overlay */
     #ui-container {
       position: absolute;
       top: 0;
@@ -50,8 +46,8 @@
       font-weight: 900;
       text-shadow: 0 2px 6px rgba(0,0,0,0.8);
     }
-    .score-box { font-size: 26px; }
-    .stunt-label { font-size: 16px; color: #f1c40f; height: 22px; }
+    .score-box { font-size: 28px; }
+    .stunt-label { font-size: 16px; color: #ffd32a; height: 22px; font-weight: 800; }
     .controls {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -70,7 +66,7 @@
       border: 1px solid rgba(255, 255, 255, 0.25);
       border-radius: 14px;
       color: #fff;
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 800;
       padding: 18px 0;
       text-align: center;
@@ -78,7 +74,7 @@
     }
     .btn:active, .btn.active {
       transform: scale(0.96);
-      background: rgba(255, 255, 255, 0.3);
+      background: rgba(255, 255, 255, 0.35);
     }
     .btn-gas { background: rgba(46, 204, 113, 0.3); border-color: #2ecc71; }
     .btn-rear-brake { background: rgba(231, 76, 60, 0.3); border-color: #e74c3c; }
@@ -100,21 +96,21 @@
       z-index: 10;
     }
     .restart-btn {
-      background: #f1c40f;
+      background: #ffd32a;
       color: #000;
       font-weight: 900;
-      font-size: 18px;
+      font-size: 17px;
       border: none;
       padding: 14px 44px;
       border-radius: 30px;
-      margin-top: 20px;
+      margin-top: 18px;
       cursor: pointer;
     }
   </style>
 </head>
 <body>
 
-  <div id="canvas-container"></div>
+  <canvas id="gameCanvas"></canvas>
 
   <div id="ui-container">
     <div class="hud">
@@ -122,7 +118,7 @@
         <div class="score-box" id="score">0</div>
         <div class="stunt-label" id="stunt-tag"></div>
       </div>
-      <div id="speed" style="font-size: 18px; color: #aaa;">0 KM/H</div>
+      <div id="speed" style="font-size: 18px; color: #888;">0 KM/H</div>
     </div>
 
     <div class="controls">
@@ -138,8 +134,8 @@
   </div>
 
   <div id="overlay-screen">
-    <h1 style="font-size: 32px; font-weight: 900; margin-bottom: 8px;">💥 КРАШ!</h1>
-    <p style="color: #bbb; font-size: 15px;" id="crash-reason">Ты перевернулся</p>
+    <h1 style="font-size: 32px; font-weight: 900; margin-bottom: 6px;">💥 КРАШ!</h1>
+    <p style="color: #bbb; font-size: 14px;" id="crash-reason">Переворот</p>
     <button class="restart-btn" onclick="restartGame()">ЕЩЁ РАЗ</button>
   </div>
 
@@ -147,28 +143,21 @@
     const tg = window.Telegram?.WebApp;
     if (tg) { tg.expand(); tg.ready(); }
 
-    const { Engine, Render, Runner, Bodies, Composite, Constraint, Body, Events, Vector } = Matter;
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
 
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener("resize", resize);
+    resize();
+
+    // Физика Matter.js
+    const { Engine, World, Bodies, Composite, Constraint, Body } = Matter;
     const engine = Engine.create();
     const world = engine.world;
 
-    const container = document.getElementById("canvas-container");
-    const render = Render.create({
-      element: container,
-      engine: engine,
-      options: {
-        width: window.innerWidth,
-        height: window.innerHeight,
-        wireframes: false,
-        background: "#12131a"
-      }
-    });
-
-    Render.run(render);
-    const runner = Runner.create();
-    Runner.run(runner, engine);
-
-    // Управление
     const input = { gas: false, rearBrake: false, frontBrake: false, leanBack: false };
 
     function bind(id, prop) {
@@ -185,127 +174,100 @@
     bind("btn-front-brake", "frontBrake");
     bind("btn-lean-back", "leanBack");
 
-    // Клавиши для ПК тестов
-    window.addEventListener("keydown", (e) => {
-      if (e.code === "ArrowUp" || e.code === "KeyD") input.gas = true;
-      if (e.code === "ArrowDown" || e.code === "KeyS") input.rearBrake = true;
-      if (e.code === "KeyA") input.frontBrake = true;
-      if (e.code === "ArrowLeft") input.leanBack = true;
-    });
-    window.addEventListener("keyup", (e) => {
-      if (e.code === "ArrowUp" || e.code === "KeyD") input.gas = false;
-      if (e.code === "ArrowDown" || e.code === "KeyS") input.rearBrake = false;
-      if (e.code === "KeyA") input.frontBrake = false;
-      if (e.code === "ArrowLeft") input.leanBack = false;
-    });
-
-    // Создание рельефа трассы
-    function createTerrain() {
-      const segments = [];
-      const baseY = window.innerHeight * 0.75;
-      let currX = 0;
+    // Трасса
+    const terrainSegments = [];
+    function buildTerrain() {
+      const baseY = canvas.height * 0.72;
+      let currX = -200;
       let currY = baseY;
 
-      for (let i = 0; i < 40; i++) {
-        let width = 200 + Math.random() * 80;
+      for (let i = 0; i < 50; i++) {
+        let width = 220;
         let angle = 0;
-
-        // Делаем кочки и трамплины через каждые несколько сегментов
-        if (i > 3 && i % 4 === 0) angle = -0.15; // трамплин вверх
-        else if (i > 3 && (i - 1) % 4 === 0) angle = 0.15; // спуск
+        if (i > 3 && i % 5 === 0) angle = -0.16; // трамплин
+        else if (i > 3 && (i - 1) % 5 === 0) angle = 0.16;
 
         const nextX = currX + Math.cos(angle) * width;
         const nextY = currY + Math.sin(angle) * width;
-
         const midX = (currX + nextX) / 2;
         const midY = (currY + nextY) / 2;
 
-        const ground = Bodies.rectangle(midX, midY + 25, width, 50, {
+        const seg = Bodies.rectangle(midX, midY + 40, width, 80, {
           isStatic: true,
           angle: angle,
-          friction: 0.95,
-          render: { fillStyle: "#1e222d" }
+          friction: 0.95
         });
+        terrainSegments.push({ body: seg, x1: currX, y1: currY, x2: nextX, y2: nextY });
+        Composite.add(world, seg);
 
-        segments.push(ground);
         currX = nextX;
         currY = nextY;
       }
-      Composite.add(world, segments);
     }
-    createTerrain();
+    buildTerrain();
 
-    // Создание мотоцикла с РЕАЛЬНОЙ подвеской
+    // Мотоцикл
     let bikeBody, rearWheel, frontWheel, rearSuspension, frontSuspension;
     let isCrashed = false;
     let score = 0;
 
-    function buildMotorcycle(x, y) {
-      const group = Body.nextGroup(true); // чтобы колеса и рама не сталкивались друг с другом
+    function buildMoto(x, y) {
+      const group = Body.nextGroup(true);
 
-      // Рама байка
-      bikeBody = Bodies.rectangle(x, y, 70, 20, {
+      // Рама (невидимый физ-коллайдер)
+      bikeBody = Bodies.rectangle(x, y, 64, 18, {
         collisionFilter: { group: group },
-        density: 0.003,
-        render: { fillStyle: "#e74c3c" }
+        density: 0.003
       });
 
       // Колеса
-      const wheelOptions = {
+      const wheelOpts = {
         collisionFilter: { group: group },
-        friction: 0.98,
-        density: 0.002,
-        render: { fillStyle: "#2c3e50" }
+        friction: 1.0,
+        density: 0.0025
       };
-      rearWheel = Bodies.circle(x - 40, y + 25, 20, wheelOptions);
-      frontWheel = Bodies.circle(x + 40, y + 25, 20, wheelOptions);
+      rearWheel = Bodies.circle(x - 36, y + 25, 18, wheelOpts);
+      frontWheel = Bodies.circle(x + 36, y + 25, 18, wheelOpts);
 
-      // Задняя подвеска (пружина-амортизатор)
+      // Амортизаторы
       rearSuspension = Constraint.create({
         bodyA: bikeBody,
-        pointA: { x: -35, y: 10 },
+        pointA: { x: -32, y: 10 },
         bodyB: rearWheel,
-        stiffness: 0.18,   // мягкость хода подвески
-        damping: 0.08,     // гашение ударов
-        length: 22,
-        render: { strokeStyle: "#7f8c8d", lineWidth: 5 }
+        stiffness: 0.22,
+        damping: 0.1,
+        length: 22
       });
 
-      // Передняя подвеска (вилка)
       frontSuspension = Constraint.create({
         bodyA: bikeBody,
-        pointA: { x: 35, y: 10 },
+        pointA: { x: 32, y: 10 },
         bodyB: frontWheel,
-        stiffness: 0.22,
-        damping: 0.09,
-        length: 22,
-        render: { strokeStyle: "#bdc3c7", lineWidth: 5 }
+        stiffness: 0.25,
+        damping: 0.1,
+        length: 22
       });
 
-      // Дополнительные соединители геометрии, чтобы рама держала баланс оси
       const rearAxle = Constraint.create({
         bodyA: bikeBody,
-        pointA: { x: -10, y: 10 },
+        pointA: { x: -10, y: 8 },
         bodyB: rearWheel,
-        stiffness: 0.2,
-        damping: 0.08,
-        length: 35,
-        render: { visible: false }
+        stiffness: 0.22,
+        damping: 0.1,
+        length: 32
       });
       const frontAxle = Constraint.create({
         bodyA: bikeBody,
-        pointA: { x: 10, y: 10 },
+        pointA: { x: 10, y: 8 },
         bodyB: frontWheel,
-        stiffness: 0.2,
-        damping: 0.08,
-        length: 35,
-        render: { visible: false }
+        stiffness: 0.25,
+        damping: 0.1,
+        length: 32
       });
 
       Composite.add(world, [bikeBody, rearWheel, frontWheel, rearSuspension, frontSuspension, rearAxle, frontAxle]);
     }
-
-    buildMotorcycle(150, window.innerHeight * 0.65);
+    buildMoto(180, canvas.height * 0.6);
 
     function triggerCrash(reason) {
       if (isCrashed) return;
@@ -316,7 +278,6 @@
     }
 
     window.restartGame = function() {
-      // Очистка и пересоздание
       const allBodies = Composite.allBodies(world);
       const allConstraints = Composite.allConstraints(world);
       allBodies.forEach(b => !b.isStatic && Composite.remove(world, b));
@@ -325,66 +286,206 @@
       isCrashed = false;
       score = 0;
       document.getElementById("overlay-screen").style.display = "none";
-      buildMotorcycle(150, window.innerHeight * 0.65);
+      buildMoto(180, canvas.height * 0.6);
     };
 
-    // Главный цикл обновлений
-    Events.on(engine, "beforeUpdate", () => {
-      if (isCrashed) return;
+    // Отрисовка колеса со спицами и шиной
+    function drawWheel(wheel) {
+      ctx.save();
+      ctx.translate(wheel.position.x, wheel.position.y);
+      ctx.rotate(wheel.angle);
 
-      // 1. Газ (крутит заднее колесо + задирает раму вверх для Вилли)
-      if (input.gas) {
-        rearWheel.torque = 0.06;
-        bikeBody.torque = 0.045; // крутящий момент на подъем переда
+      // Покрышка
+      ctx.fillStyle = "#1e222a";
+      ctx.beginPath();
+      ctx.arc(0, 0, 18, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Обод
+      ctx.strokeStyle = "#e74c3c";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, 14, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Спицы
+      ctx.strokeStyle = "#888";
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(-13, 0);
+        ctx.lineTo(13, 0);
+        ctx.stroke();
+        ctx.rotate(Math.PI / 4);
       }
 
-      // 2. Задний тормоз (блокирует заднее колесо, сбивает угол вилли)
-      if (input.rearBrake) {
-        Body.setAngularVelocity(rearWheel, rearWheel.angularVelocity * 0.7);
-        bikeBody.torque = -0.06; // прижимает переднее колесо к земле
-      }
+      ctx.restore();
+    }
 
-      // 3. Передний тормоз (выход в Стоппи)
-      if (input.frontBrake) {
-        Body.setAngularVelocity(frontWheel, frontWheel.angularVelocity * 0.5);
-        if (bikeBody.velocity.x > 2) {
-          bikeBody.torque = -0.065; // задирает заднее колесо
+    // Отрисовка вилки/подвески
+    function drawFork(pointA, pointB, color) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 5;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(pointA.x, pointA.y);
+      ctx.lineTo(pointB.x, pointB.y);
+      ctx.stroke();
+    }
+
+    // Главный цикл
+    function loop() {
+      // 1. Физический шаг
+      if (!isCrashed) {
+        if (input.gas) {
+          rearWheel.torque = 0.065;
+          bikeBody.torque = 0.048; // подъем на заднее
         }
+        if (input.rearBrake) {
+          Body.setAngularVelocity(rearWheel, rearWheel.angularVelocity * 0.7);
+          bikeBody.torque = -0.065; // сбивает угол вилли
+        }
+        if (input.frontBrake) {
+          Body.setAngularVelocity(frontWheel, frontWheel.angularVelocity * 0.5);
+          if (bikeBody.velocity.x > 1.8) bikeBody.torque = -0.07; // стоппи
+        }
+        if (input.leanBack) bikeBody.torque = 0.055;
+
+        Engine.update(engine, 1000 / 60);
+
+        // Расчет станта
+        const deg = (bikeBody.angle * 180) / Math.PI;
+        if (deg > 85) triggerCrash("Перевернулся через крыло!");
+        if (deg < -80) triggerCrash("Перелетел через руль!");
+
+        let stuntText = "";
+        if (deg > 22 && deg <= 80) {
+          score += Math.floor(deg / 4);
+          stuntText = deg > 62 ? "🔥 12 O'CLOCK SCRAPE!" : "⚡ WHEELIE";
+        } else if (deg < -16 && deg >= -75 && bikeBody.velocity.x > 1.5) {
+          score += 8;
+          stuntText = "🎯 STOPPIE";
+        }
+        document.getElementById("score").innerText = score;
+        document.getElementById("stunt-tag").innerText = stuntText;
+        document.getElementById("speed").innerText = `${Math.floor(bikeBody.velocity.x * 9)} KM/H`;
       }
 
-      // 4. Вес назад
-      if (input.leanBack) {
-        bikeBody.torque = 0.05;
-      }
+      // 2. Графика и рендеринг
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Камера следит за байком
-      Render.lookAt(render, bikeBody, {
-        x: window.innerWidth * 0.35,
-        y: window.innerHeight * 0.35
+      // Фон: градиент неба и городской горизонт
+      const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      grad.addColorStop(0, "#0b0c14");
+      grad.addColorStop(1, "#1c1f2e");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Камера (следит за мотоциклом)
+      ctx.save();
+      const cameraX = canvas.width * 0.35 - bikeBody.position.x;
+      const cameraY = canvas.height * 0.55 - bikeBody.position.y;
+      ctx.translate(cameraX, cameraY);
+
+      // Отрисовка земли/трассы
+      ctx.fillStyle = "#161922";
+      ctx.strokeStyle = "#f39c12";
+      ctx.lineWidth = 4;
+      terrainSegments.forEach(seg => {
+        ctx.beginPath();
+        ctx.moveTo(seg.x1, seg.y1);
+        ctx.lineTo(seg.x2, seg.y2);
+        ctx.lineTo(seg.x2, seg.y2 + 300);
+        ctx.lineTo(seg.x1, seg.y1 + 300);
+        ctx.closePath();
+        ctx.fill();
+
+        // Верхняя кромка асфальта
+        ctx.beginPath();
+        ctx.moveTo(seg.x1, seg.y1);
+        ctx.lineTo(seg.x2, seg.y2);
+        ctx.stroke();
       });
 
-      // Логика стантов и падений
-      const deg = (bikeBody.angle * 180) / Math.PI;
+      // Подвеска: вилка и задний маятник
+      const pRear = Vector.add(bikeBody.position, Vector.rotate({ x: -32, y: 10 }, bikeBody.angle));
+      const pFront = Vector.add(bikeBody.position, Vector.rotate({ x: 32, y: 10 }, bikeBody.angle));
+      drawFork(pRear, rearWheel.position, "#7f8c8d");
+      drawFork(pFront, frontWheel.position, "#f1c40f");
 
-      if (deg > 85) triggerCrash("Переворот назад!");
-      if (deg < -80) triggerCrash("Перелёт через руль!");
+      // Колеса
+      drawWheel(rearWheel);
+      drawWheel(frontWheel);
 
-      let stuntText = "";
-      // Wheelie: наклон назад, заднее колесо крутится
-      if (deg > 20 && deg <= 80) {
-        score += Math.floor(deg / 4);
-        stuntText = deg > 60 ? "🔥 12 O'CLOCK SCRAPE!" : "⚡ WHEELIE";
-      }
-      // Stoppie: наклон вперед на ходу
-      else if (deg < -15 && deg >= -75 && bikeBody.velocity.x > 1.5) {
-        score += 8;
-        stuntText = "🎯 STOPPIE";
-      }
+      // Отрисовка байка и райдера
+      ctx.save();
+      ctx.translate(bikeBody.position.x, bikeBody.position.y);
+      ctx.rotate(bikeBody.angle);
 
-      document.getElementById("score").innerText = score;
-      document.getElementById("stunt-tag").innerText = stuntText;
-      document.getElementById("speed").innerText = `${Math.floor(bikeBody.velocity.x * 9)} KM/H`;
-    });
+      // Пластик / бак байка
+      ctx.fillStyle = "#e74c3c";
+      ctx.beginPath();
+      ctx.moveTo(-35, 5);
+      ctx.lineTo(-20, -12); // хвост / сиденье
+      ctx.lineTo(10, -12);  // бак
+      ctx.lineTo(32, -4);   // переднее крыло
+      ctx.lineTo(15, 8);
+      ctx.lineTo(-30, 8);
+      ctx.closePath();
+      ctx.fill();
+
+      // Сиденье
+      ctx.strokeStyle = "#111";
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(-22, -13);
+      ctx.lineTo(2, -13);
+      ctx.stroke();
+
+      // Руль
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(18, -8);
+      ctx.lineTo(22, -26); // стойка руля
+      ctx.stroke();
+
+      // Райдер (тело и руки)
+      ctx.strokeStyle = "#3498db"; // куртка
+      ctx.lineWidth = 5;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(-8, -14); // таз
+      ctx.lineTo(input.leanBack ? -24 : -12, -36); // корпус
+      ctx.lineTo(22, -26); // руки к рулю
+      ctx.stroke();
+
+      // Нога на подножке
+      ctx.strokeStyle = "#2c3e50";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(-8, -14);
+      ctx.lineTo(2, -2);
+      ctx.stroke();
+
+      // Шлем
+      ctx.fillStyle = "#f1c40f";
+      ctx.beginPath();
+      ctx.arc(input.leanBack ? -26 : -14, -46, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Визор шлема
+      ctx.fillStyle = "#111";
+      ctx.beginPath();
+      ctx.arc(input.leanBack ? -23 : -11, -46, 4, -0.5, 0.5);
+      ctx.fill();
+
+      ctx.restore();
+      ctx.restore();
+
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
   </script>
 </body>
 </html>
