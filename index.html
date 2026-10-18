@@ -48,7 +48,7 @@ const tg=window.Telegram&&window.Telegram.WebApp;
 if(tg){try{tg.ready();tg.expand();tg.disableVerticalSwipes&&tg.disableVerticalSwipes()}catch(e){}}
 const hap=t=>{try{tg&&tg.HapticFeedback.impactOccurred(t)}catch(e){}};
 const $=i=>document.getElementById(i),cv=$('c'),cx=cv.getContext('2d');
-const g=9.81,TS=.25,SUB=10;
+const g=9.81,TS=.25,SUB=16;
 let bike,S=null,T=[0],gSl=0,mode='menu',best=0,cam={x:5,y:-1,vw:10},SC=1,W=1,H=1;
 try{best=+localStorage.getItem('sr_best')||0}catch(e){}
 const inp={gas:0,brake:0,back:0,fwd:0};
@@ -59,8 +59,8 @@ const BIKES=[
 {n:'Питбайк',c:'#ff5a3c',M:125,bx:.5,fx:.6,r:.21,h:.66,F:.8,vm:22,ky:.4,sm:.14,sg:.05,mw:6},
 {n:'Эндуро',c:'#ffb020',M:190,bx:.72,fx:.73,r:.33,h:.86,F:1,vm:27,ky:.5,sm:.22,sg:.08,mw:9},
 {n:'Кросс 450',c:'#7aa2ff',M:175,bx:.72,fx:.76,r:.33,h:.85,F:1.2,vm:30,ky:.5,sm:.26,sg:.09,mw:8}];
-BIKES.forEach((b,i)=>{b.t=['scooter','pit','enduro','moto'][i];b.hipY=b.h-[.72,.74,.92,.92][i]-.2;b.barX=b.fx-[.2,.2,.22,.22][i];b.barH=[1.03,.95,1.2,1.2][i]});
-BIKES.forEach(b=>{b.hy=b.h-b.r+b.sg;b.I=b.M*b.ky*b.ky;b.mu=1.05;b.Iw=.9*b.mw*b.r*b.r;const wb=b.bx+b.fx;b.k=[b.M*g*(b.fx/wb)/b.sg,b.M*g*(b.bx/wb)/b.sg]});
+BIKES.forEach((b,i)=>{b.t=['scooter','pit','enduro','moto'][i];b.hipY=b.h-[.72,.74,.92,.92][i]-.2;b.barX=b.fx-[.2,.2,.22,.22][i];b.barY=b.h-[1.03,.95,1.2,1.2][i];b.h0=b.h;b.h-=[.05,.06,.08,.08][i]});
+BIKES.forEach(b=>{b.hy=b.h-b.r+b.sg;b.I=b.M*b.ky*b.ky;b.mu=1.4;b.Iw=.9*b.mw*b.r*b.r;const wb=b.bx+b.fx;b.k=[b.M*g*(b.fx/wb)/b.sg,b.M*g*(b.bx/wb)/b.sg]});
 BIKES.forEach(b=>{const e=document.createElement('button');e.className='k';e.innerHTML='<span><i style="background:'+b.c+'"></i>'+b.n+'</span><small>'+Math.round(b.vm*3.6)+' км/ч · '+b.M+' кг · тяга '+b.F+'g</small>';e.onclick=()=>start(b);$('list').appendChild(e)});
 function rs(){const d=Math.min(devicePixelRatio||1,2);W=cv.width=innerWidth*d;H=cv.height=innerHeight*d}
 addEventListener('resize',rs);rs();
@@ -69,11 +69,11 @@ addEventListener('contextmenu',e=>e.preventDefault());
 function add(len,f){const n=Math.round(len/TS),b=T[T.length-1];for(let j=1;j<=n;j++)T.push(b-f(j/n))}
 const kick=(R,L)=>{add(L,t=>R*t*t);add(R*5+3,t=>-R*(1-(1-t)*(1-t)));add(6,()=>0)};
 function nextSeg(){const x=(T.length-1)*TS,D=Math.min(1,x/500),r=Math.random(),c=Math.cos;
- if(x<40||r<.5)add(14+Math.random()*16,()=>0);
- else if(r<.6){const A=.15+Math.random()*.2,n=1;add(n*14,t=>A*(1-c(6.283*n*t))/2);add(4,()=>0)}
- else if(r<.68){const n=2+(Math.random()*2|0);add(n*2.6,t=>.13*(1-c(6.283*n*t))/2);add(8,()=>0)}
- else if(r<.88)kick(.7+Math.random()*.7+D*.4,3.5);
- else if(r<.95)kick(1.5+Math.random()*.6+D*.5,4.6);
+ if(x<40||r<.58)add(14+Math.random()*16,()=>0);
+ else if(r<.7){const A=.05+Math.random()*.06,n=1;add(n*14,t=>A*(1-c(6.283*n*t))/2);add(4,()=>0)}
+ else if(r<.76){const n=2+(Math.random()*2|0);add(n*2.6,t=>.04*(1-c(6.283*n*t))/2);add(8,()=>0)}
+ else if(r<.9)kick(.6+Math.random()*.5+D*.3,3.5);
+ else if(r<.96)kick(1.3+Math.random()*.5+D*.4,4.6);
  else{const R=2+Math.random()*.5;add(3.2,t=>R*t*t*t);add(R*4+4,t=>-R*(1-(1-t)*(1-t)));add(8,()=>0)}}
 function G(x){if(x<0){gSl=0;return T[0]}const f=x/TS,i=f|0;if(i+2>=T.length){gSl=0;return T[T.length-1]}
  const t=f-i,t2=t*t,t3=t2*t,y0=T[i],y1=T[i+1],m0=(y1-T[i?i-1:0])*.5,m1=(T[i+2]-y0)*.5;
@@ -86,20 +86,20 @@ function start(b){bike=b;T=[0];gen(100);const v=4;
  cam.x=5;cam.y=-1;cam.vw=10;mode='play';$('menu').classList.add('hide');$('over').classList.add('hide');$('ctl').classList.remove('hide')}
 // ---------- физика ----------
 function phys(dt){const b=bike,s=S,c=Math.cos(s.a),sn=Math.sin(s.a),live=!(s.dead>0);
- const sh=-.3*s.lean,th=live&&inp.gas?1:0,br=live&&inp.brake?1:0;s.bp+=((br?1:0)-s.bp)*Math.min(1,dt*(br?5:12));
+ const sh=-.3*s.lean,th=live&&inp.gas?1:0,br=live&&inp.brake?1:0;s.bp+=((br?1:0)-s.bp)*Math.min(1,dt*(br?9:14));
  let Fx=-.35*Math.hypot(s.vx,s.vy)*s.vx,Fy=b.M*g-.35*Math.hypot(s.vx,s.vy)*s.vy,tau=0,any=0;
  for(let i=0;i<2;i++){
   const lx=(i?b.fx:-b.bx)-sh,ly=b.hy,rx=lx*c-ly*sn,ry=lx*sn+ly*c,px=s.x+rx,py=s.y+ry;
   const hvx=s.vx-s.w*ry,hvy=s.vy+s.w*rx,gy=G(px),m=gSl,q=1/Math.sqrt(1+m*m),d=(gy-py)*q,p=b.r-d;
-  const k=b.k[i],cd=2*.4*Math.sqrt(k*b.M*.5);let Ft=0,Nn=0;
+  const k=b.k[i],cd=2*.75*Math.sqrt(k*b.M*.5);let Ft=0,Nn=0;
   s.cp[i]=Math.max(0,Math.min(p,b.sm+.03));
   if(p>0){const nx=m*q,ny=-q,tx=q,ty=m*q,vn=hvx*nx+hvy*ny,vt=hvx*tx+hvy*ty;
-   let N=k*p-cd*vn;if(p>b.sm)N+=k*8*(p-b.sm);if(N<0)N=0;
-   Ft=-b.mu*N*Math.max(-1,Math.min(1,(vt-s.wr[i]*b.r)/.8));
-   Nn=N;const fx=N*nx+Ft*tx,fy=N*ny+Ft*ty;Fx+=fx;Fy+=fy;tau+=rx*fy-ry*fx;s.hit[i]=1;any=1}
+   let N=k*p-cd*(vn>0?1.4:1)*(p>b.sm?2.5:1)*vn;if(p>b.sm)N+=k*8*(p-b.sm);if(N<0)N=0;
+   Ft=-b.mu*N*Math.max(-1,Math.min(1,(vt-s.wr[i]*b.r)/.6));
+   Nn=N;const rr=-.02*N*Math.max(-1,Math.min(1,vt/.5)),fx=N*nx+(Ft+rr)*tx,fy=N*ny+(Ft+rr)*ty;Fx+=fx;Fy+=fy;tau+=rx*fy-ry*fx;s.hit[i]=1;any=1}
   // момент двигателя/тормоза на колесо; реакция - на раму (отсюда уилли и поведение газа/тормоза в воздухе)
-  let Td=0;if(i===0){const v=Math.max(0,s.wr[0]*b.r);Td=th*b.F*b.M*g*Math.max(0,1-v/b.vm)*b.r}
-  let Tb=s.bp*b.M*g*b.r*(i?.5:.4);if(Nn>0)Tb=Math.min(Tb,.92*b.mu*Nn*b.r);const w0=s.wr[i]+(Td-Ft*b.r)/b.Iw*dt,dw=Tb/b.Iw*dt;
+  let Td=0;if(i===0){const v=Math.max(0,s.wr[0]*b.r);Td=th?b.F*b.M*g*Math.max(0,1-v/b.vm)*b.r:-.1*b.M*g*b.r*Math.min(1,v/2)}
+  let Tb=s.bp*b.M*g*b.r*(i?.55:1);if(Nn>0)Tb=Math.min(Tb,.92*b.mu*Nn*b.r);const w0=s.wr[i]+(Td-Ft*b.r)/b.Iw*dt,dw=Tb/b.Iw*dt;
   const w1=w0>0?Math.max(0,w0-dw):Math.min(0,w0+dw);
   tau+=-Td+(w0-w1)*b.Iw/dt;s.wr[i]=w1*(1-.15*dt);s.th[i]+=s.wr[i]*dt}
  if(live)tau+=-s.lean*b.I*(any?1.5:5); // наклон корпуса гонщика
@@ -107,7 +107,7 @@ function phys(dt){const b=bike,s=S,c=Math.cos(s.a),sn=Math.sin(s.a),live=!(s.dea
  s.x+=s.vx*dt;s.y+=s.vy*dt;s.a+=s.w*dt}
 function pts(){const s=S,b=bike,sc=b.t==='scooter',t=(sc?.25:.45)-s.lean*.55,hip=[(sc?-.3:-.18)+(-.3*s.lean)*1.2,b.hipY];
  const sh=[hip[0]+Math.sin(t)*.5,hip[1]-Math.cos(t)*.5],head=[sh[0]+Math.sin(t)*.17,sh[1]-Math.cos(t)*.17];
- return{hip,sh,head,bars:[b.barX,b.h-b.barH],tail:[-b.bx-.12,b.hipY+.02]}}
+ return{hip,sh,head,bars:[b.barX,b.barY],tail:[-b.bx-.12,b.hipY+.02]}}
 function toW(p){const s=S,sh=-.3*s.lean,c=Math.cos(s.a),n=Math.sin(s.a),x=p[0]-sh,y=p[1];return{x:s.x+x*c-y*n,y:s.y+x*n+y*c}}
 function bank(p,l){const s=S;s.combo=s.t-s.lastB<4?s.combo+1:1;const pts=Math.round(p*s.combo);s.score+=pts;s.msg=l+(s.combo>1?' ×'+s.combo:'')+'  +'+pts;s.msgT=2.5;s.lastB=s.t}
 function crash(why){const s=S;if(s.dead>0)return;s.dead=.001;s.msg=why;s.msgT=3;s.combo=0;const h=toW(pts().head);
@@ -207,7 +207,7 @@ function drawBike(){const s=S,b=bike,sh=-.3*s.lean,P=pts(),dead=s.dead>0;
  
  
  
- if(!dead){cx.strokeStyle='#1d2a4a';cx.lineWidth=.12;const ft=b.t==='scooter'?[.2,b.h-.25]:[-.02,b.h-.38],kn=[(P.hip[0]+ft[0])/2+.22,(P.hip[1]+ft[1])/2-.02];L(P.hip[0],P.hip[1],kn[0],kn[1]);L(kn[0],kn[1],ft[0],ft[1]);
+ if(!dead){cx.strokeStyle='#1d2a4a';cx.lineWidth=.12;const ft=b.t==='scooter'?[.2,b.h0-.25]:[-.02,b.h0-.38],kn=[(P.hip[0]+ft[0])/2+.22,(P.hip[1]+ft[1])/2-.02];L(P.hip[0],P.hip[1],kn[0],kn[1]);L(kn[0],kn[1],ft[0],ft[1]);
   cx.strokeStyle=b.c;cx.lineWidth=.16;L(P.hip[0],P.hip[1],P.sh[0],P.sh[1]);
   cx.strokeStyle='#e8e8f0';cx.lineWidth=.08;const el=[(P.sh[0]+P.bars[0])/2,(P.sh[1]+P.bars[1])/2+.12];L(P.sh[0],P.sh[1],el[0],el[1]);L(el[0],el[1],P.bars[0],P.bars[1]);
   cx.fillStyle='#fff';cx.beginPath();cx.arc(P.head[0],P.head[1],.12,0,7);cx.fill();cx.fillStyle='#222';cx.fillRect(P.head[0]+.02,P.head[1]-.04,.11,.06)}
